@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
-import csv, getpass, io, ipywidgets as ipw, json, os, pickle, pydicom, re, shlex, subprocess, sys, tempfile, tensorflow as tf, unittest, warnings, zipfile, argparse
+import csv, getpass, io, json, os, pickle, pydicom, re, shlex, subprocess, sys, tempfile, tensorflow as tf, unittest, warnings, zipfile, argparse, numpy as np, math,sklearn
 
 # Subpackages and function imports
-from IPython.display import FileLink
-from matplotlib import pyplot as plt
+#from IPython.display import FileLink
+#from matplotlib import pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -17,7 +17,8 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.utils import to_categorical
 
-module_path = os.path.abspath(os.path.join('..'))
+module_path = os.path.abspath(os.path.join('../..'))
+module_path=os.path.abspath('/home/mmilchenko/src')
 if module_path not in sys.path:
     sys.path.append(module_path)
 from juxnat_lib.xnat_utils import *
@@ -34,25 +35,26 @@ class AttentionModel:
     def load_autoencoder_from_dir(self,tdir):
         #self.sequences=daem.read_pkl(tdir+'sequences.pkl')
         self.tokenizer=self.daem.read_pkl(tdir+'tokenizer.pkl')
-        sequences=daem.read_pkl(tdir+'sequences.pkl')
+        self.sequences=self.daem.read_pkl(tdir+'sequences.pkl')
 
 
     def save_autoencoder_to_dir(self,tdir):
-        self.daem.write_pkl(sequences, tdir+'sequences.pkl')
+        self.daem.write_pkl(self.sequences, tdir+'sequences.pkl')
         self.daem.write_pkl(tokenizer, tdir+'tokenizer.pkl')
 
-    def sequences_from_scans(self,scans):        
+    def sequences_from_scans(self,scans,max_length,fit_tokenizer=False):
         #scans=daem.read_pkl_scans('/data/ImagingCommons/data.ImagingCommons.416237_1.pkl')
         #scans=daem.read_pkl_scans('./test/all_scans_hofid.pkl')
         #scans=daem.read_pkl_scans('/data/mirrir_1351062.pkl')
         #scans=self.daem.read_pkl_scans(scans_pkl_file)
-        descs=self.daem.filter_least_frequent_words(daem.prepare_descs(scans),15000)
-        self.tokenizer = Tokenizer(filters='',oov_token='UNK')
-        tokenizer.fit_on_texts(descs)
-        self.sequences = tokenizer.texts_to_sequences(descs)
-
-        vocab_size = len(tokenizer.word_index) + 1
-        self.max_length = max(len(seq) for seq in sequences)
+        descs=self.daem.filter_least_frequent_words(self.daem.prepare_descs(scans),15000)
+        if fit_tokenizer:
+            self.tokenizer = Tokenizer(filters='',oov_token='UNK')
+            self.tokenizer.fit_on_texts(descs)
+            
+        self.sequences = self.tokenizer.texts_to_sequences(descs)
+        vocab_size = len(self.tokenizer.word_index) + 1
+        self.max_length = max(len(seq) for seq in self.sequences)        
         return pad_sequences(self.sequences, maxlen=max_length, padding='post')
 
     def create_autoencoder_model(self):
@@ -87,10 +89,10 @@ class AttentionModel:
         reducer = ReduceLROnPlateau(monitor='loss',factor=0.5, patience=10)
         autoencoder.fit_generator(self.data_generator(X_train, batch_size), epochs=1000, steps_per_epoch=steps_per_epoch,callbacks=[reducer])
 
-    def save_autoencoder(self,tdir,model_file='autoencoder.dualhead.21ep.h5')
+    def save_autoencoder(self,tdir,model_file='autoencoder.dualhead.21ep.h5'):
         self.autoencoder.save(tdir+'autoencoder.dualhead.21ep.h5')
         
-    def load_autoencoder(self,tdir,model_file='autoencoder.dualhead.21ep.h5')
+    def load_autoencoder(self,tdir,model_file='autoencoder.dualhead.21ep.h5'):
         self.autoencoder=tf.keras.models.load_model(tdir+'autoencoder.dualhead.21ep.h5')
         return self.autoencoder
 
@@ -154,7 +156,7 @@ class AttentionModel:
     def load_training_scans_test(self):
         scans1,descs1=self.load_training_scans('./test/all_scans_hofid.pkl')
         input_sentence = descs1[10000]
-        output_sentence = predict_sentence(input_sentence, autoencoder, tokenizer, max_length)
+        output_sentence = predict_sentence(input_sentence, autoencoder, self.tokenizer, max_length)
         print(f"Input Sentence: {input_sentence}")
         print(f"Output Sentence: {output_sentence}")
         
@@ -246,16 +248,16 @@ class AttentionModel:
     def evaluate_classifier_model(self,X1_test,Y1_test):
         loss, accuracy = self.classification_model.evaluate(X1_test, Y1_test)
 
-    def load_model(self,tokenizer_file,model_file,nomenclature_file):
+    def load_model(self,tokenizer_file,model_file):
         try:
             print('loading tokenizer from',tokenizer_file)
-            tokenizer=self.daem.read_pkl(tokenizer_file)
+            self.tokenizer=self.daem.read_pkl(tokenizer_file)
             print('loading mdoel from',model_file)
             model=tf.keras.models.load_model(model_file)
         except Exception as e:
             print('error loading: '+zipfile)
             print(e)
-        return tokenizer,model
+        return self.tokenizer,model
             
     def save_model(self, tokenizer, model, root):
         try: 
@@ -280,30 +282,48 @@ class AttentionModel:
         for i in range (0,len(pred_inv)):
             m+=1
             if val_ord[i] != pred_inv[i]: 
-                s=tokens_to_sentence(X1_test[i],tokenizer).split(' ')        
+                s=tokens_to_sentence(X1_test[i],self.tokenizer).split(' ')        
                 #print(i,val_ord[i],pred_inv[i])
                 print(i,val_ord[i],pred_inv[i],' '.join([ s[i] for i in range(0,len(s)) if s[i].startswith('seriesdescription') ]))
-                #print(tokens_to_sentence(X1_test[i],tokenizer))
+                #print(tokens_to_sentence(X1_test[i],self.tokenizer))
                 n+=1        
         print('misclassifications: {} out of {}'.format(n,m))
 
     def classify_dicom_scans(self, dcm_file_list, tokenizer_file, model_file, nomenclature_file,confidence_level=0.95,unknown_label='UNKNOWN'):
         scans=self.daem.scans_from_files(dcm_file_list)
         self.tokenizer,self.classification_model=self.load_model(tokenizer_file,model_file)
-        sequences=self.sequences_from_scans(scans)
+        max_length=self.classification_model.layers[0].input_shape[0][1]
+        sd=self.sequences=self.sequences_from_scans(scans,max_length)
+        #print(self.sequences.shape)
+        #print(self.sequences)
+        
         scan_types=self.load_nomenclature(nomenclature_file)
-        pred=self.classification_model.predict(sequences)
+        pred=self.classification_model.predict(self.sequences)
+        
         pred_ord=np.argmax(pred,1)
         label_encoder = LabelEncoder()
-        label_encoder.fit_transform(self.load_nomenclature(nomenclature_file)                                    
+        label_encoder.fit_transform(self.load_nomenclature(nomenclature_file))                                    
         pred_inv=label_encoder.inverse_transform(pred_ord)
         out_label=[]
+        series_descriptions=[]
+        #prediction quality metrics
+        pred_entropy=[]
+        pred_gini_impurity=[]
+        pred_margin_confidence=[]
+        
         for i in range (0,len(pred_inv)):
-            if pred[i][np.argmax(pred[i])]>=confidence_level: 
+            pred_cur=pred[i]
+            max_pred=np.argmax(pred_cur)
+            if pred_cur[max_pred]>=confidence_level: 
                 out_label+=[pred_inv[i]]
             else:
-                out_label+=[unknown_label]                                
-        return out_label
+                out_label+=[unknown_label]
+                            
+            pred_gini_impurity+=[1-np.sum(np.array([pred_cur[i]*pred_cur[i] for i in range (0,len(pred_cur))]))]
+            pred_margin_confidence+=[np.partition(pred_cur, -2)[-1]-np.partition(pred_cur, -2)[-2]]
+            series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
+        print(out_label)        
+        return out_label,pred_gini_impurity,pred_margin_confidence,series_descriptions
         
 def parse_args():
     parser = argparse.ArgumentParser(description='Classify a list of DICOM files using a trained model.')
@@ -313,10 +333,14 @@ def parse_args():
     parser.add_argument('--nomenclature_file', type=str, help='nomenclature file')    
     return parser.parse_args()
 
+def l2str(arr):
+    lst=[str(arr[i]) for i in range(0,len(arr))]
+    return ' '.join(lst)
+
 def main():
     args = parse_args()
     dicom_files = args.dicom_files
-    model_file = args.model_dir
+    model_file = args.model_file
     tokenizer_file = args.tokenizer_file
     nomenclature_file = args.nomenclature_file
     
@@ -331,11 +355,25 @@ def main():
             print(f"Error: Specified file does not exist: {file}", file=sys.stderr)
             sys.exit(1)
         
-    AttentionModel am=AttentionModel()
-    labels=am.classify_dicom_scans(dicom_files)    
-    print(labels)
-
+    am=AttentionModel()
+    #print('classify_dicom_scans {} {} {}'.format(dicom_files,tokenizer_file,model_file,nomenclature_file))
+    labels,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
+    
+#    with open('classification_output.txt','wt') as f:
+#        print('files=({})'.format(' '.join(dicom_files)),file=f)
+#        print('labels=({})'.format(' '.join(labels)),file=f)
+#        print('series_descriptions=({})'.format(' '.join(series_descriptions)),file=f)
+        #print('pred_entropy=({})'.format(' '.join(pred_entropy)),file=f)
+#        print('pred_gini_impurity=({})'.format(l2str(pred_gini_impurity)),file=f)
+#        print('pred_margin_confidence=({})'.format(l2str(pred_margin_confidence)),file=f)
+    
+    d={'files':dicom_files,'labels':labels,'series_descriptions':series_descriptions,       'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+    
+    with open('classification_output.csv',mode='w',newline='') as f:
+        w=csv.DictWriter(f,fieldnames=d.keys())
+        w.writeheader()
+        for row in zip(*d.values()): w.writerow(dict(zip(d.keys(),row)))
+        
 if __name__ == '__main__':
     main()
     
-        

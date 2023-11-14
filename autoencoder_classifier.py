@@ -217,14 +217,14 @@ class DICOMAutoencoderModel:
     def scans_from_files(self,file_list,tags=None):
         if tags is None: tags=self._all_tags
         scans=[]
-        for f in file_list:
+        for file in file_list:
             d=dict()
             ds=pydicom.filereader.dcmread(file,stop_before_pixels=True,specific_tags=tags)            
             for tag in tags:
-            try:
-                d[tag]=ds[tag].value
-            except Exception as e:
-                pass
+                try:
+                    d[tag]=ds[tag].value
+                except Exception as e:
+                    pass
             scans+=[d]
         return scans
         

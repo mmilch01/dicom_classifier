@@ -2,82 +2,201 @@
 
 # Function to handle errors
 handle_error() {
-    echo "dicom_classifier error: $1"
+    echo "run_classifier_xnat ERROR: $1"
     exit 1
 }
 
-if [ -z "$5" ]; then 
-	echo "usage: run_classifier_xnat <XNAT experiment dir> <path_to_model_file> <xnat_server> <xnat_project> <xnat_subject> <xnat_experiment> [options]"
-	echo "	options:"
-	echo "	-model 		<model_file>		model file [/docker_input/model.h5]"
-	echo "	-tok 		<tokenizer_file>	tokenizer file [/docker_input/tokenizer.tok]"
-	echo "	-nom		<nomenclature_file>	nomenclature json file [/docker_input/nomenclature.json]"
-	echo "	-jsession 	<JSESSION ID>		XNAT's JSESSION. May be supplied instead of user/password."
-	echo "	-user		<user>			XNAT user"
-	echo "	-pass		<password>		XNAT password"
+handle_warning() {
+    echo "run_classifier_xnat WARNING: $1"
+}
+
+# Function to find the first DICOM file in a given directory
+get_first_dicom_file() {
+  local dicom_dir=$1
+  # This will return the first file found in the given directory
+  find "$dicom_dir" -type f -name "*.dcm" | head -n 1
+}
+
+# Function to populate arrays based on directory type
+process_directories() {
+  local input_dir="$1"
+  for dir in "$input_dir"/*; do
+    if [[ -d "$dir" ]]; then
+      local experiment_label=$(basename "$dir")
+      # Check if it matches type 1 pattern
+      if [[ -d "$dir/SCANS" ]]; then
+        for scan_dir in "$dir/SCANS"/*; do
+          if [[ -d "$scan_dir/DICOM" ]]; then
+            input_type=1
+            local scan_id=$(basename "$scan_dir")
+            local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+            type1_array["$experiment_label"]="$scan_id,$file_path"
+          fi
+        done
+      fi
+    fi
+  done
+  
+  # Check for type 2 pattern
+  if [[ -d "$input_dir/SCANS" ]]; then
+    for scan_dir in "$input_dir/SCANS"/*; do
+      if [[ -d "$scan_dir/DICOM" ]]; then
+        input_type=2
+        local scan_id=$(basename "$scan_dir")
+        local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+        type2_array+=("$scan_id,$file_path")
+      fi
+    done
+  fi
+}
+
+resolve_subject() {
+    experiment_label=$1
+    subject_label=$(curl -s -b JSESSIONID=$jsession $xnat_server/data/projects/$project_id/experiments/$experiment_label?format=json -X GET -H "Content-Type: application/json" | jq -r '.items[0].data_fields.subject_ID')
+    if (( $? )); then handle_error "cannot resolve subject label for $experiment_label"; fi
+    echo $subject_label
+}
+
+if [ -z "$2" ]; then 
+
+	echo "usage: run_classifier_xnat <input dir> <configuration_file> [options]"
+	echo "Runs in offline mode unless  XNAT credentials and required XNAT fields are specified."
+	echo "In online mode, sets the 'scan type' XNAT field to the inferred type."
+	echo "The input configuration file must point to correct model, nomenclature and tokenizer files."
+	
+	echo "Can run on a single or multiple experiment directory (directory structure conforms to container service project or experiment mounts)"
+	echo "single experiment directory: <input_dir>/SCANS/{scan ID}/DICOM/{DICOM files}"
+	echo "multi-experiment directory: <input_dir>/{experiment ID}/SCANS/{scan ID}/DICOM/{DICOM files}"
+	
+	echo "options:"
+	echo "  -jsession   <XNAT JSESSION>  Either this or user/password required in online mode"
+	echo "  -server     <XNAT server>       Required in online mode"
+	echo "  -project    <XNAT project>      Required in online mode]"
+	echo "  -user       <XNAT user>         This or JSESSION is required in online mode"
+	echo "  -pass       <XNAT password>     This or JSESSION is required in online mode"
+	echo "  -subject    <XNAT subject>      Required for single-experiment mode [online mode]"
+	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
+	
 	exit -1
 fi
 
 # Input arguments
 main_input_dir=$1; shift
-xnat_server=$1; shift
-project_id=$1; shift
-subject_id=$1; shift
-experiment_id=$1; shift
+config_file=$1; shift;
+source $config_file
 
-case $1 in 
-    -model) shift; model_file=$1; shift ;;
-    -nom)   shift; nom_file=$1; shift ;;
-    -tok)   shift; tok_file=$1; shift ;;
+case $1 in
+    -server)   shift; xnat_server=$1; shift ;;
+    -project)   shift; project_id=$1; shift ;;
     -jsession) shift; jsession_token=$1; shift ;;
     -user)  shift;  xnat_user=$1; shift ;;
     -pass)  shift; xnat_pass=$1; shift ;;
+    -subject) shift; subject_id=$1; shift;;
+    -experiment) shift; experiment_id=$1; shift;;
     *)  shift ;;
 esac
+
 
 if [ ! -f "$model_file" -o ! -f "$nom_file" -o ! -f "$tok_file" ]; then 
 	handle_error "One of requred files (model, nomenclature, tokenizer) is missing"
 fi
+online_mode=0
 
-if [ -n "$xnat_user" -a -n "$xnat_pass" ]; then 
-    jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
-    if (( $? )); then handle_error("Cannot connect to $xnat_server"); fi
+if [ -n "$xnat_server" -a -n "$xnat_project" ]; then 
+    if [ -z "$jsession_token" ]; then 
+        jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
+        if (( $? )); then handle_error "Cannot connect to $xnat_server"; fi
+    fi
 fi
 
-# Arrays to hold scan IDs and DICOM file paths
-declare -a scan_ids
-declare -a dicom_files
+#set -x
 
-# Populate arrays with scan IDs and DICOM file paths
-while IFS=  read -r -d $'\0'; do
-    scan_id=$(basename $(dirname $(dirname $(dirname $REPLY))))
-    scan_ids+=("$scan_id")
-    dicom_files+=("$REPLY")
-done < <(find "$main_input_dir" -type f -name "*.dcm" -print0)
+# Associative array holding experiment->scan_id,first_DICOM_file
+declare -A type1_array
+# Indexed array holding scan_id,first_DICOM_file 
+type2_array=()
+input_type=-1
+experiment_list=()
+scan_list=()
+file_list=()
+valid_list=()
+
+process_directories "$main_input_dir"
+
+if (( input_type==1 )); then
+    keys=(${!type1_array[@]})
+    for (( i=0; i<${#type1_array[@]}; i++ )); do
+        key=${keys[i]}
+        entry=${type1_array[$key]}        
+        IFS=',' read -ra tuple <<< "$entry"
+        experiment_list+=($key)
+        scan_list+=(${tuple[0]})
+        file_list+=(${tuple[1]})
+    done
+else
+    for entry in ${type2_array[@]}; do
+        IFS=',' read -ra tuple <<< "$entry"
+        scan_list+=(${tuple[0]})
+        file_list+=(${tuple[1]})
+    done
+fi
+
+#echo ${experiment_list[@]}
+echo ${scan_list[@]}
+echo ${file_list[@]}
+#exit -1
+
 
 # Check if arrays are populated
-[[ ${#scan_ids[@]} -eq 0 ]] && handle_error "No DICOM files found"
+[[ ${#file_list[@]} -eq 0 ]] && handle_error "No DICOM files found"
 
+echo "determining modalities"
 # Determine modality for each scan
 declare -a modalities
-for dicom_file in "${dicom_files[@]}"; do
-    modality=$(dcminfo_dcmtk 0008,0060 "$dicom_file" | tr '[:upper:]' '[:lower:]')
-    [[ -z "$modality" ]] && handle_error "Failed to determine modality for $dicom_file"
+for dicom_file in "${file_list[@]}"; do
+    line=`dcmdump +P 0008,0060 $dicom_file`;line="${line#*[}";line="${line%]*}"
+
+    modality=$(echo $line | tr '[:upper:]' '[:lower:]')
+    if [ -z "$modality" ]; then 
+        handle_warning "Failed to determine modality for $dicom_file"
+        valid_list+=(0)
+    else
+        valid_list+=(1)
+    fi
     modalities+=("$modality")
+
 done
 
+echo "running classifier"
 # Run autoencoder_models.py to infer scan types
-echo python3 autoencoder_models.py "${dicom_files[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
-scan_types=($(python3 autoencoder_models.py "${dicom_files[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file))
+echo python3 autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+python3 /home/mmilchenko/src/scan_classifier/dicom_classifier/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 
-[[ ${#scan_types[@]} -ne ${#dicom_files[@]} ]] && handle_error "Failed to infer scan types"
+rcsv classification_output.csv classification_output.sh
+source classification_output.sh
 
-# Set scan type in XNAT using REST API
-for i in "${!scan_ids[@]}"; do
-    curl -X PUT "$xnat_server/data/projects/$project_id/subjects/$subject_id/experiments/$experiment_id/scans/${scan_ids[$i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${scan_types[$i]}" \
-        -H "Cookie: JSESSIONID=$jsession_token" \
-        --fail --silent --show-error || handle_error "Failed to update scan type for ${scan_ids[$i]}"
-done
+exit 0
+[[ ${#labels[@]} -ne ${#file_list[@]} ]] && handle_error "Failed to infer scan types"
+
+#for type1 processing, resolve subject for each experiment
+if (( input_type==1 )); then 
+    subjects=()
+    for experiment in ${!type1_array[*]}; do
+        subjects+=(resolve_subject $experiment)
+    done
+    # Set scan type in XNAT using REST API
+    for i in "${!scan_list[@]}"; do
+        curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
+            -H "Cookie: JSESSIONID=$jsession_token" \
+            --fail --silent --show-error || handle_error "Failed to update scan type for projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}"
+    done    
+else 
+    # Set scan type in XNAT using REST API
+    for i in "${!scan_list[@]}"; do
+        curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subject_id}/experiments/${experiment_id}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
+            -H "Cookie: JSESSIONID=$jsession_token" \
+            --fail --silent --show-error || handle_error "Failed to update scan type for projects/$project_id/subjects/${subject_id}/experiments/${experiment_id}/scans/${scan_list[i]}"
+    done
+fi
 
 echo "Script completed successfully"
-
