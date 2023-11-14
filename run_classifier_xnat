@@ -69,6 +69,7 @@ if [ -z "$2" ]; then
 	echo "multi-experiment directory: <input_dir>/{experiment ID}/SCANS/{scan ID}/DICOM/{DICOM files}"
 	
 	echo "options:"
+	echo "  -output     <directory>         output directory [/output]"
 	echo "  -jsession   <XNAT JSESSION>  Either this or user/password required in online mode"
 	echo "  -server     <XNAT server>       Required in online mode"
 	echo "  -project    <XNAT project>      Required in online mode]"
@@ -84,6 +85,7 @@ fi
 main_input_dir=$1; shift
 config_file=$1; shift;
 source $config_file
+out_dir=/output
 
 case $1 in
     -server)   shift; xnat_server=$1; shift ;;
@@ -93,6 +95,7 @@ case $1 in
     -pass)  shift; xnat_pass=$1; shift ;;
     -subject) shift; subject_id=$1; shift;;
     -experiment) shift; experiment_id=$1; shift;;
+    -output) shift; out_dir=$1; shift ;;
     *)  shift ;;
 esac
 
@@ -172,10 +175,13 @@ echo "running classifier"
 echo python3 autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 python3 /home/mmilchenko/src/scan_classifier/dicom_classifier/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 
-rcsv classification_output.csv classification_output.sh
-source classification_output.sh
+cp classification_output.csv $out_dir
 
+#rcsv classification_output.csv classification_output.sh
+#source classification_output.sh
 exit 0
+
+
 [[ ${#labels[@]} -ne ${#file_list[@]} ]] && handle_error "Failed to infer scan types"
 
 #for type1 processing, resolve subject for each experiment
@@ -184,6 +190,9 @@ if (( input_type==1 )); then
     for experiment in ${!type1_array[*]}; do
         subjects+=(resolve_subject $experiment)
     done
+    #upload the resource
+    
+    
     # Set scan type in XNAT using REST API
     for i in "${!scan_list[@]}"; do
         curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
@@ -191,6 +200,8 @@ if (( input_type==1 )); then
             --fail --silent --show-error || handle_error "Failed to update scan type for projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}"
     done    
 else 
+    # upload the resource
+    
     # Set scan type in XNAT using REST API
     for i in "${!scan_list[@]}"; do
         curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subject_id}/experiments/${experiment_id}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
