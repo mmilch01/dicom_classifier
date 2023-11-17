@@ -67,6 +67,7 @@ if [ -z "$2" ]; then
 	echo "Can run on a single or multiple experiment directory (directory structure conforms to container service project or experiment mounts)"
 	echo "single experiment directory: <input_dir>/SCANS/{scan ID}/DICOM/{DICOM files}"
 	echo "multi-experiment directory: <input_dir>/{experiment ID}/SCANS/{scan ID}/DICOM/{DICOM files}"
+	echo "required Python modules (autoencoder_models.py and dependencies) must be accessible under $PYLIB directory"
 	
 	echo "options:"
 	echo "  -output     <directory>         output directory [/output]"
@@ -79,6 +80,10 @@ if [ -z "$2" ]; then
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
 	
 	exit -1
+fi
+
+if [ ! -f "$PYLIB/autoencoder_models.py" ]; then 
+	handle_error "PYLIB environment variable is not defined or does not contain required files (autoencoder_models.py and dependencies)
 fi
 
 # Input arguments
@@ -172,10 +177,14 @@ done
 
 echo "running classifier"
 # Run autoencoder_models.py to infer scan types
-echo python3 autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
-python3 /home/mmilchenko/src/scan_classifier/dicom_classifier/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+echo python3 $PYLIB/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+python3 $PYLIB/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 
-cp classification_output.csv $out_dir
+tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
+
+if [ -d "$out_dir" ]; then 
+	cp classification_output.csv $out_dir/$tfile
+fi
 
 #rcsv classification_output.csv classification_output.sh
 #source classification_output.sh

@@ -11,7 +11,7 @@ popd
 
 mkdir -p src
 cp juxnat_lib/xnat_utils.py src/
-cp autoencoder_models.py autoencoder_classifier.py src/
+cp autoencoder_models.py autoencoder_classifier.py run_classifier_xnat src/
 
 echo chmod -R o+rX `pwd`
 chmod -R o+rX `pwd`

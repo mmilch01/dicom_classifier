@@ -24,10 +24,7 @@ warnings.simplefilter('ignore')
 #%load_ext autoreload
 #%autoreload 2
 
-module_path = os.path.abspath(os.path.join('..'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
-from juxnat_lib.xnat_utils import *
+from xnat_utils import *
 
 """
 Created on Mon Dec 12 15:45:06 2022

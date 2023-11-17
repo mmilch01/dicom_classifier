@@ -17,11 +17,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.utils import to_categorical
 
-module_path = os.path.abspath(os.path.join('../..'))
-module_path=os.path.abspath('/home/mmilchenko/src')
-if module_path not in sys.path:
-    sys.path.append(module_path)
-from juxnat_lib.xnat_utils import *
+from xnat_utils import *
 from autoencoder_classifier import DICOMAutoencoderModel
 
 """

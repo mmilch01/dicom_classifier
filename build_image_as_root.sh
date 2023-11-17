@@ -1,4 +1,4 @@
 #!/bin/bash
 
-echo "building Docker image for the BOLD Extracted Networks Inferred by Classifier Extrapolation (BENICE) pipeline."
-docker build . -t nrg/benice_docker
+echo "building Docker image."
+docker build . -t registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier
