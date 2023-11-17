@@ -43,8 +43,11 @@ RUN mkdir -p /input
 
 COPY src /src
 COPY model_mirrir_1351062s_15Kt.10.04.2023 /models/model_mirrir_1351062s_15Kt.10.04.2023
+ENV PYLIB=/src
 
 RUN rm -rf /tmp/* /var/cache/yum
+
+WORKDIR /output
 
 #ENV RELEASE=/nrgpackages/tools/nil-tools REFDIR=/nrgpackages/atlas
 #ENV MFREL=/nrgpackages/tools/nrg-improc MFSCRIPT=/nrgpackages/tools/nrg-improc MFCONDR=/nrgpackages/tools/nrg-improc/CONDR

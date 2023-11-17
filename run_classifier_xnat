@@ -83,13 +83,14 @@ if [ -z "$2" ]; then
 fi
 
 if [ ! -f "$PYLIB/autoencoder_models.py" ]; then 
-	handle_error "PYLIB environment variable is not defined or does not contain required files (autoencoder_models.py and dependencies)
+	handle_error "PYLIB environment variable is not defined or does not contain required files (autoencoder_models.py and dependencies)"
 fi
 
 # Input arguments
 main_input_dir=$1; shift
 config_file=$1; shift;
 source $config_file
+echo "model label: $model_label"
 out_dir=/output
 
 case $1 in
