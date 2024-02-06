@@ -1,13 +1,13 @@
 {
   "name": "benice",
-  "label": "DICOM_LM_CLASSIFIER v0.1",
-  "description": "Runs DICOM LM classifier on project data",
+  "label": "DICOM_LM_classifier v0.1",
+  "description": "Runs DICOM LM classifier",
   "version": "0.1",
   "schema-version": "1.0",
   "info-url": "",
   "image": "registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier:0.1",
   "type": "docker",
-  "command-line": "\"run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf -server $XNAT_HOST -user $XNAT_USER -pass $XNAT_PASS -project #PROJECT# -experiment #SESSION_LABEL# \"",
+  "command-line": "\"run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf\"",
   "override-entrypoint": true,
   "mounts": [
     {
@@ -23,42 +23,7 @@
   ],
   "environment-variables": {},
   "ports": {},
-  "inputs": [
-    {
-      "name": "SESSION_LABEL",
-      "label": null,
-      "description": "XNAT session label",
-      "type": "string",
-      "matcher": null,
-      "default-value": null,
-      "required": true,
-      "replacement-key": null,
-      "sensitive": null,
-      "command-line-flag": null,
-      "command-line-separator": null,
-      "true-value": null,
-      "false-value": null,
-      "select-values": [],
-      "multiple-delimiter": null
-    },
-    {
-      "name": "PROJECT",
-      "label": null,
-      "description": "XNAT project",
-      "type": "string",
-      "matcher": null,
-      "default-value": null,
-      "required": true,
-      "replacement-key": null,
-      "sensitive": null,
-      "command-line-flag": null,
-      "command-line-separator": null,
-      "true-value": null,
-      "false-value": null,
-      "select-values": [],
-      "multiple-delimiter": null
-    }
-  ],
+  "inputs": [],
   "outputs": [
     {
       "name": "output",
@@ -69,11 +34,11 @@
   ],
   "xnat": [
     {
-      "name": "DICOM LM classifier-experiment",
-      "label": "DICOM LM classifier",
-      "description": "Run DICOM LM classifier on experiment",
+      "name": "DICOM LM classifier (project)",
+      "label": "DICOM LM classifier (project)",
+      "description": "Run DICOM LM classifier on project data",
       "contexts": [
-        "xnat:imageSessionData"
+        "xnat:projectData"
       ],
       "external-inputs": [
       {
@@ -82,54 +47,52 @@
         "type": "Project",
         "required": true,
         "provides-files-for-command-mount": "in",
-        "load-children": false        
+        "load-children": false
       }
       ],
-      "derived-inputs": [
-       {
-          "name": "session-label",
-          "label": null,
-          "description": "Session label",
-          "type": "string",
-          "matcher": null,
-          "default-value": null,
-          "required": true,
-          "replacement-key": null,
-          "sensitive": null,
-          "provides-value-for-command-input": "SESSION_LABEL",
-          "provides-files-for-command-mount": null,
-          "user-settable": null,
-          "load-children": true,
-          "derived-from-wrapper-input": "session",
-          "derived-from-xnat-object-property": "label",
-          "via-setup-command": null,
-          "multiple": false,
-          "parser": null
-        },
+      "derived-inputs": [],
+      "output-handlers": [
         {
-          "name": "project",
-          "label": null,
-          "description": "Project",
-          "type": "Project",
-          "matcher": null,
-          "default-value": null,
-          "required": true,
-          "replacement-key": null,
-          "sensitive": null,
-          "provides-value-for-command-input": "PROJECT",
-          "provides-files-for-command-mount": null,
-          "user-settable": null,
-          "load-children": true,
-          "derived-from-wrapper-input": "session",
-          "derived-from-xnat-object-property": null,
-          "via-setup-command": null,
-          "multiple": false,
-          "parser": null
+            "name": "output-resource",
+            "accepts-command-output": "output",
+            "as-a-child-of": "project",
+            "type": "Resource",
+            "label": "DICOM_LM_CLASSIFIER_OUTPUT",
+            "tags": []
         }
-      ],
-      "output-handlers": []
-    }
+      ]
+    },
+    {
+        "name": "DICOM LM classifier (experiment)",
+        "label": "DICOM LM classifier (experiment)",
+        "description": "Run DICOM LM classifier on experiment data",
+        "contexts": [
+          "xnat:imageSessionData"
+        ],
+        "external-inputs": [
+        {
+          "name": "session",
+          "description": "Input session",
+          "type": "Session",
+          "required": true,
+          "provides-files-for-command-mount": "in",
+          "load-children": false        
+        }
+        ],
+        "derived-inputs": [],
+        "output-handlers": [
+          {
+              "name": "output-resource",
+              "accepts-command-output": "output",
+              "as-a-child-of": "session",
+              "type": "Resource",
+              "label": "DICOM_LM_CLASSIFIER_OUTPUT",
+              "tags": []
+          }
+        ]
+      }
   ],
+
   "reserve-memory": 12284,
   "container-labels": {},
   "generic-resources": {},

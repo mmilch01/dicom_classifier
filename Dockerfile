@@ -1,6 +1,8 @@
 FROM centos:7.5.1804
-RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-RUN yum -y install https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch.rpm
+
+#RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+#RUN yum -y install https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch.rpm
+RUN yum -y install epel-release
 
 #RUN cd /etc/yum.repos.d/
 #RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
@@ -10,7 +12,7 @@ RUN yum -y install https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch
 #RUN yum -y install https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
 
 
-RUN yum -y install bc wget curl epel-release which 
+RUN yum -y install bc wget curl epel-release which tree
 RUN yum -y install CharLS libtiff libXfont
 #RUN yum -y install zip unzip ImageMagick html2ps xvfb bc wget epel-release bzip2 which git cmake gcc gcc-c++ libstdc++-static epel-release csh compat-libgfortran-41 libjpeg-turbo-utils
 
@@ -56,4 +58,4 @@ WORKDIR /output
 #RUN cp -l /nrgpackages/tools/mricron/dcm2niix /nrgpackages/tools/mricron/dcm2nii
 #RUN chmod +x /nrgpackages/tools/mricron/dcm2nii && chmod +x /nrgpackages/tools/mricron/dcm2niix
 
-#ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT [ "/bin/bash", "-l", "-c" ]

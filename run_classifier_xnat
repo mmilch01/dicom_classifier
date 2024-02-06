@@ -24,12 +24,19 @@ process_directories() {
     if [[ -d "$dir" ]]; then
       local experiment_label=$(basename "$dir")
       # Check if it matches type 1 pattern
-      if [[ -d "$dir/SCANS" ]]; then
+      if [[ -d "$dir/SCANS" ]]; then	
         for scan_dir in "$dir/SCANS"/*; do
+	  if (( verbose )); then echo "found $scan_dir under SCANS, type 1"; fi
           if [[ -d "$scan_dir/DICOM" ]]; then
+ 	        if (( verbose )); then echo "found DICOM dir with $a files under $scan_dir, type 1"; fi
             input_type=1
             local scan_id=$(basename "$scan_dir")
-            local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+            #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+            local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+	        if (( verbose )); then 
+    	        a=$(ls $scan_dir/DICOM | wc); a=($a)
+	            echo "first file path under $scan_dir/DICOM (type 1, $a files): $file_path"
+	        fi
             type1_array["$experiment_label"]="$scan_id,$file_path"
           fi
         done
@@ -40,10 +47,17 @@ process_directories() {
   # Check for type 2 pattern
   if [[ -d "$input_dir/SCANS" ]]; then
     for scan_dir in "$input_dir/SCANS"/*; do
+      if (( verbose )); then echo "found $scan_dir under SCANS, type 2"; fi
       if [[ -d "$scan_dir/DICOM" ]]; then
+	if (( verbose )); then echo "found DICOM dir under $scan_dir, type 2"; fi
         input_type=2
         local scan_id=$(basename "$scan_dir")
-        local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+        #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+        local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+	    if (( verbose )); then 
+    	    a=$(ls $scan_dir/DICOM | wc); a=($a)
+	        echo "first file path under $scan_dir/DICOM (type 2, $a files): $file_path"
+	    fi
         type2_array+=("$scan_id,$file_path")
       fi
     done
@@ -71,13 +85,14 @@ if [ -z "$2" ]; then
 	
 	echo "options:"
 	echo "  -output     <directory>         output directory [/output]"
-	echo "  -jsession   <XNAT JSESSION>  Either this or user/password required in online mode"
+	echo "  -jsession   <XNAT JSESSION>     Either this or user/password required in online mode"
 	echo "  -server     <XNAT server>       Required in online mode"
 	echo "  -project    <XNAT project>      Required in online mode]"
 	echo "  -user       <XNAT user>         This or JSESSION is required in online mode"
 	echo "  -pass       <XNAT password>     This or JSESSION is required in online mode"
 	echo "  -subject    <XNAT subject>      Required for single-experiment mode [online mode]"
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
+	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
 	
 	exit -1
 fi
@@ -92,6 +107,9 @@ config_file=$1; shift;
 source $config_file
 echo "model label: $model_label"
 out_dir=/output
+verbose=0
+
+input_file_list=$out_dir/input_file_list.txt
 
 case $1 in
     -server)   shift; xnat_server=$1; shift ;;
@@ -102,6 +120,7 @@ case $1 in
     -subject) shift; subject_id=$1; shift;;
     -experiment) shift; experiment_id=$1; shift;;
     -output) shift; out_dir=$1; shift ;;
+    -verbose) shift; verbose=$1; shift ;;
     *)  shift ;;
 esac
 
@@ -151,8 +170,10 @@ else
 fi
 
 #echo ${experiment_list[@]}
-echo ${scan_list[@]}
-echo ${file_list[@]}
+if (( verbose )); then 
+	echo "detected scans: ${scan_list[@]}"
+	echo "detected files to use: ${file_list[@]}"
+fi
 #exit -1
 
 
@@ -176,15 +197,21 @@ for dicom_file in "${file_list[@]}"; do
 
 done
 
+#write input files to the list file.
+rm -f $input_file_list
+for file in "${file_list[@]}"; do
+    echo $file >> $input_file_list
+done
+
 echo "running classifier"
 # Run autoencoder_models.py to infer scan types
-echo python3 $PYLIB/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
-python3 $PYLIB/autoencoder_models.py "${file_list[@]}" --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file"
+python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 
 tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
 
 if [ -d "$out_dir" ]; then 
-	cp classification_output.csv $out_dir/$tfile
+	mv classification_output.csv $out_dir/$tfile
 fi
 
 #rcsv classification_output.csv classification_output.sh

@@ -323,10 +323,11 @@ class AttentionModel:
         
 def parse_args():
     parser = argparse.ArgumentParser(description='Classify a list of DICOM files using a trained model.')
-    parser.add_argument('dicom_files', type=str, nargs='+', help='List of paths to DICOM files to be classified.')
-    parser.add_argument('--model_file', type=str, help='trained model file')
-    parser.add_argument('--tokenizer_file', type=str, help='tokenizer file')
-    parser.add_argument('--nomenclature_file', type=str, help='nomenclature file')    
+    #parser.add_argument('dicom_files', type=str, nargs='+', help='List of paths to DICOM files to be classified.')
+    parser.add_argument('--file_list', type=str, help='file with input DICOM file list', required=True)
+    parser.add_argument('--model_file', type=str, help='trained model file',required=True)
+    parser.add_argument('--tokenizer_file', type=str, help='tokenizer file',required=True)
+    parser.add_argument('--nomenclature_file', type=str, help='nomenclature file',required=True)
     return parser.parse_args()
 
 def l2str(arr):
@@ -335,23 +336,31 @@ def l2str(arr):
 
 def main():
     args = parse_args()
-    dicom_files = args.dicom_files
+    #dicom_files = args.dicom_files
+    dicom_files=[]
+    file_list=args.file_list
     model_file = args.model_file
     tokenizer_file = args.tokenizer_file
     nomenclature_file = args.nomenclature_file
     
     # Verify that the specified DICOM files exist
+    if not os.path.exists(file_list):    
+        print("Error: input file list {} does not exist".format(file_list))
+        sys.exit(1)
+    
+    with open(file_list, 'r') as file:
+        for line in file:
+            dicom_files.append(line.strip())
+
     for file in dicom_files:
         if not os.path.exists(file):
             print(f"Error: Specified DICOM file does not exist: {file}", file=sys.stderr)
             sys.exit(1)
-
-    for file in (model_file,tokenizer_file,nomenclature_file):
-        if not os.path.exists(file):
-            print(f"Error: Specified file does not exist: {file}", file=sys.stderr)
-            sys.exit(1)
-        
+            
+    print('classifying {} files.'.format(len(dicom_files)))
+    
     am=AttentionModel()
+    
     #print('classify_dicom_scans {} {} {}'.format(dicom_files,tokenizer_file,model_file,nomenclature_file))
     labels,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
     
@@ -363,7 +372,7 @@ def main():
 #        print('pred_gini_impurity=({})'.format(l2str(pred_gini_impurity)),file=f)
 #        print('pred_margin_confidence=({})'.format(l2str(pred_margin_confidence)),file=f)
     
-    d={'files':dicom_files,'labels':labels,'series_descriptions':series_descriptions,       'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+    d={'files':dicom_files,'labels':labels,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
     
     with open('classification_output.csv',mode='w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=d.keys())
