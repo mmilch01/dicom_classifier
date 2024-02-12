@@ -17,6 +17,19 @@ get_first_dicom_file() {
   find "$dicom_dir" -type f -name "*.dcm" | head -n 1
 }
 
+#input: path
+function get_middle_dcm_file () {
+    local path=$1
+    total=$(find $path -maxdepth 1 -type f -name "*.dcm" | wc -l)
+    if (( total<1 )); then return;
+    elif (( total==1 )); then
+            ls $path/*.dcm
+            return
+    fi
+    local middle=$((total / 2))
+    find $path -maxdepth 1 -type f -name "*.dcm" | sort | sed -n "${middle}p"
+}
+
 # Function to populate arrays based on directory type
 process_directories() {
   local input_dir="$1"
@@ -32,10 +45,17 @@ process_directories() {
             input_type=1
             local scan_id=$(basename "$scan_dir")
             #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
-            local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+            #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+            #local file_path=$(find $scan_dir/DICOM/ -maxdepth 1 -type f -name "*.dcm" | head -n 1)
+            local file_path=$(get_middle_dcm_file "$scan_dir/DICOM")
+
+            if [ ! -f "$file_path" ]; then 
+                echo "WARNING: no DICOM files under $scan_dir/DICOM, skipping"
+                continue
+            fi
 	        if (( verbose )); then 
     	        a=$(ls $scan_dir/DICOM | wc); a=($a)
-	            echo "first file path under $scan_dir/DICOM (type 1, $a files): $file_path"
+	            echo "middle file path under $scan_dir/DICOM (type 1, $a files): $file_path"
 	        fi
             type1_array["$experiment_label"]="$scan_id,$file_path"
           fi
@@ -53,10 +73,18 @@ process_directories() {
         input_type=2
         local scan_id=$(basename "$scan_dir")
         #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
-        local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+        #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+        #local file_path=$(find $scan_dir/DICOM/ -maxdepth 1 -type f -name "*.dcm" | head -n 1)
+        local file_path=$(get_middle_dcm_file "$scan_dir/DICOM")
+
+        if [ ! -f "$file_path" ]; then 
+            echo "WARNING: no DICOM files under $scan_dir/DICOM, skipping"
+            continue
+        fi
+                
 	    if (( verbose )); then 
     	    a=$(ls $scan_dir/DICOM | wc); a=($a)
-	        echo "first file path under $scan_dir/DICOM (type 2, $a files): $file_path"
+	        echo "middle file path under $scan_dir/DICOM (type 2, $a files): $file_path"
 	    fi
         type2_array+=("$scan_id,$file_path")
       fi
@@ -85,7 +113,8 @@ if [ -z "$2" ]; then
 	
 	echo "options:"
 	echo "  -output     <directory>         output directory [/output]"
-	echo "  -jsession   <XNAT JSESSION>     Either this or user/password required in online mode"
+    echo "  -file_index <file>              file listing input DICOM files. Auto-generation is skipped if specified."
+	echo "  -jsession   <XNAT JSESSION>     Either this or user/password required in online mode."
 	echo "  -server     <XNAT server>       Required in online mode"
 	echo "  -project    <XNAT project>      Required in online mode]"
 	echo "  -user       <XNAT user>         This or JSESSION is required in online mode"
@@ -95,6 +124,11 @@ if [ -z "$2" ]; then
 	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
 	
 	exit -1
+fi
+
+#attempt to guess source directory
+if [ -z "$PYLIB" ]; then
+    PYLIB="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 fi
 
 if [ ! -f "$PYLIB/autoencoder_models.py" ]; then 
@@ -107,23 +141,36 @@ config_file=$1; shift;
 source $config_file
 echo "model label: $model_label"
 out_dir=/output
+
 verbose=0
+file_list_defined=0
 
 input_file_list=$out_dir/input_file_list.txt
 
-case $1 in
-    -server)   shift; xnat_server=$1; shift ;;
-    -project)   shift; project_id=$1; shift ;;
-    -jsession) shift; jsession_token=$1; shift ;;
-    -user)  shift;  xnat_user=$1; shift ;;
-    -pass)  shift; xnat_pass=$1; shift ;;
-    -subject) shift; subject_id=$1; shift;;
-    -experiment) shift; experiment_id=$1; shift;;
-    -output) shift; out_dir=$1; shift ;;
-    -verbose) shift; verbose=$1; shift ;;
-    *)  shift ;;
-esac
+while [ -n "$1" ]; do
+    case $1 in
+        -server)    shift; xnat_server=$1; shift ;;
+        -project)   shift; project_id=$1; shift ;;
+        -jsession)  shift; jsession_token=$1; shift ;;
+        -user)      shift;  xnat_user=$1; shift ;;
+        -pass)      shift; xnat_pass=$1; shift ;;
+        -subject)   shift; subject_id=$1; shift ;;
+        -experiment) shift; experiment_id=$1; shift ;;
+        -output)    echo "output arg"; shift; out_dir=$1; shift ;;
+        -verbose)   echo "verbose arg"; shift; verbose=$1; shift ;;
+        -file_index) echo "file index arg"; shift; input_file_list=$1; file_list_defined=1; shift ;;
+        *) echo "argument: $1, shifting" shift ;;
+    esac
+done
 
+if [ ! -d "$out_dir" ]; then
+    mkdir -p $out_dir
+    if [ ! -d "$out_dir" ]; then
+        echo "WARNING: output directory $out_dir does not exist and could not be created. Output dir is created under: `pwd`/output."
+        mkdir -p `pwd`/output
+        out_dir=`pwd`/output
+    fi
+fi
 
 if [ ! -f "$model_file" -o ! -f "$nom_file" -o ! -f "$tok_file" ]; then 
 	handle_error "One of requred files (model, nomenclature, tokenizer) is missing"
@@ -138,7 +185,6 @@ if [ -n "$xnat_server" -a -n "$xnat_project" ]; then
 fi
 
 #set -x
-
 # Associative array holding experiment->scan_id,first_DICOM_file
 declare -A type1_array
 # Indexed array holding scan_id,first_DICOM_file 
@@ -148,62 +194,68 @@ experiment_list=()
 scan_list=()
 file_list=()
 valid_list=()
+echo $file_list_defined
+if (( file_list_defined == 0 )); then 
+    process_directories "$main_input_dir"
 
-process_directories "$main_input_dir"
-
-if (( input_type==1 )); then
-    keys=(${!type1_array[@]})
-    for (( i=0; i<${#type1_array[@]}; i++ )); do
-        key=${keys[i]}
-        entry=${type1_array[$key]}        
-        IFS=',' read -ra tuple <<< "$entry"
-        experiment_list+=($key)
-        scan_list+=(${tuple[0]})
-        file_list+=(${tuple[1]})
-    done
-else
-    for entry in ${type2_array[@]}; do
-        IFS=',' read -ra tuple <<< "$entry"
-        scan_list+=(${tuple[0]})
-        file_list+=(${tuple[1]})
-    done
-fi
-
-#echo ${experiment_list[@]}
-if (( verbose )); then 
-	echo "detected scans: ${scan_list[@]}"
-	echo "detected files to use: ${file_list[@]}"
-fi
-#exit -1
-
-
-# Check if arrays are populated
-[[ ${#file_list[@]} -eq 0 ]] && handle_error "No DICOM files found"
-
-echo "determining modalities"
-# Determine modality for each scan
-declare -a modalities
-for dicom_file in "${file_list[@]}"; do
-    line=`dcmdump +P 0008,0060 $dicom_file`;line="${line#*[}";line="${line%]*}"
-
-    modality=$(echo $line | tr '[:upper:]' '[:lower:]')
-    if [ -z "$modality" ]; then 
-        handle_warning "Failed to determine modality for $dicom_file"
-        valid_list+=(0)
+    if (( input_type==1 )); then
+        keys=(${!type1_array[@]})
+        for (( i=0; i<${#type1_array[@]}; i++ )); do
+            key=${keys[i]}
+            entry=${type1_array[$key]}        
+            IFS=',' read -ra tuple <<< "$entry"
+            experiment_list+=($key)
+            scan_list+=(${tuple[0]})
+            file_list+=(${tuple[1]})
+        done
     else
-        valid_list+=(1)
+        for entry in ${type2_array[@]}; do
+            IFS=',' read -ra tuple <<< "$entry"
+            scan_list+=(${tuple[0]})
+            file_list+=(${tuple[1]})
+        done
     fi
-    modalities+=("$modality")
 
-done
+    #echo ${experiment_list[@]}
+    if (( verbose )); then 
+        echo "detected scans: ${scan_list[@]}"
+        echo "detected files to use: ${file_list[@]}"
+    fi
+    # Check if arrays are populated
+    [[ ${#file_list[@]} -eq 0 ]] && handle_error "No DICOM files found."
 
-#write input files to the list file.
-rm -f $input_file_list
-for file in "${file_list[@]}"; do
-    echo $file >> $input_file_list
-done
+    #write input files to the list file.
+    echo "Writing input file list."
+    rm -f $input_file_list
+    zipfile=$out_dir/file_list.zip
+    for file in "${file_list[@]}"; do
+        #echo zip -r $zipfile $file
+        #zip -r $zipfile $file
+        echo $file >> $input_file_list    
+    done
+fi
+echo 2
+determine_modalities=0
+if (( determine_modalities )); then 
+    echo "Determining modalities."
+    # Determine modality for each scan
+    declare -a modalities
+    for dicom_file in "${file_list[@]}"; do
+        line=`dcmdump +P 0008,0060 $dicom_file`;line="${line#*[}";line="${line%]*}"
 
-echo "running classifier"
+        modality=$(echo $line | tr '[:upper:]' '[:lower:]')
+        if [ -z "$modality" ]; then 
+            handle_warning "Failed to determine modality for $dicom_file."
+            valid_list+=(0)
+        else
+            valid_list+=(1)
+        fi
+        modalities+=("$modality")
+    done
+fi
+
+
+echo "Running classifier."
 # Run autoencoder_models.py to infer scan types
 echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file"
 python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
@@ -213,10 +265,14 @@ tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
 if [ -d "$out_dir" ]; then 
 	mv classification_output.csv $out_dir/$tfile
 fi
-
+echo "Done."
 #rcsv classification_output.csv classification_output.sh
 #source classification_output.sh
 exit 0
+if (( file_list_defined == 1 )); then 
+    echo "XNAT processing will not run since local file list was specified."
+    exit 0
+fi
 
 
 [[ ${#labels[@]} -ne ${#file_list[@]} ]] && handle_error "Failed to infer scan types"

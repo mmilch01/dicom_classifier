@@ -13,7 +13,7 @@ RUN yum -y install epel-release
 
 
 RUN yum -y install bc wget curl epel-release which tree
-RUN yum -y install CharLS libtiff libXfont
+RUN yum -y install CharLS libtiff libXfont zip
 #RUN yum -y install zip unzip ImageMagick html2ps xvfb bc wget epel-release bzip2 which git cmake gcc gcc-c++ libstdc++-static epel-release csh compat-libgfortran-41 libjpeg-turbo-utils
 
 

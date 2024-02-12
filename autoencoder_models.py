@@ -295,31 +295,60 @@ class AttentionModel:
         
         scan_types=self.load_nomenclature(nomenclature_file)
         pred=self.classification_model.predict(self.sequences)
-        
-        pred_ord=np.argmax(pred,1)
+
+        print('pred:',pred)
+        #pred_ord=np.argmax(pred,1)
+        pred_ord=np.argsort(-pred,axis=1)
+
+        print('pred_ord:',pred_ord)
+
         label_encoder = LabelEncoder()
         label_encoder.fit_transform(self.load_nomenclature(nomenclature_file))                                    
-        pred_inv=label_encoder.inverse_transform(pred_ord)
-        out_label=[]
+        pred_inv0=label_encoder.inverse_transform(pred_ord[:,0])
+        print('pred_inv0:',pred_inv0)
+        pred_inv1=label_encoder.inverse_transform(pred_ord[:,1])
+        print('pred_inv1:',pred_inv1)
+        #out_label=[]
         series_descriptions=[]
         #prediction quality metrics
+        #predicted most likely class
+        pred_class1=[]
+        pred_prob1=[]
+        #predicted second most likely class
+        pred_prob2=[]
+        pred_class2=[]
+
         pred_entropy=[]
         pred_gini_impurity=[]
         pred_margin_confidence=[]
         
-        for i in range (0,len(pred_inv)):
+        for i in range (0,len(pred_inv0)):
             pred_cur=pred[i]
-            max_pred=np.argmax(pred_cur)
-            if pred_cur[max_pred]>=confidence_level: 
-                out_label+=[pred_inv[i]]
-            else:
-                out_label+=[unknown_label]
-                            
-            pred_gini_impurity+=[1-np.sum(np.array([pred_cur[i]*pred_cur[i] for i in range (0,len(pred_cur))]))]
-            pred_margin_confidence+=[np.partition(pred_cur, -2)[-1]-np.partition(pred_cur, -2)[-2]]
-            series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
-        print(out_label)        
-        return out_label,pred_gini_impurity,pred_margin_confidence,series_descriptions
+            pred_ord_cur=pred_ord[i]
+            #max_pred=sorted_args[0]
+            #max_pred=pred_ord[i,0]
+            #max_pred=np.argmax(pred_cur)
+            #out_label+=[pred_inv0[i]]
+            #if pred_cur[max_pred]>=confidence_level:
+            #    out_label+=[pred_inv0[i]]
+            #else:
+            #    out_label+=[unknown_label]
+
+            pred_class1+=[ pred_inv0[i] ]
+            pred_prob1+=[ pred_cur[pred_ord_cur[0]] ]
+            pred_class2+=[ pred_inv1[i] ]
+            pred_prob2+=[ pred_cur[pred_ord_cur[1]] ]
+
+            pred_gini_impurity+=[1-np.sum(np.array([pred_cur[i]*pred_cur[i] for i in range (0,len(pred_cur))]))]            
+            pred_margin_confidence+=[pred_cur[pred_ord_cur[0]]-pred_cur[pred_ord_cur[1]]]
+
+            try:
+                series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
+            except Exception as e:
+                print('no series description for file',i)
+                
+        print('Predicted labels:',pred_class1)        
+        return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
         
 def parse_args():
     parser = argparse.ArgumentParser(description='Classify a list of DICOM files using a trained model.')
@@ -362,7 +391,7 @@ def main():
     am=AttentionModel()
     
     #print('classify_dicom_scans {} {} {}'.format(dicom_files,tokenizer_file,model_file,nomenclature_file))
-    labels,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
+    labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
     
 #    with open('classification_output.txt','wt') as f:
 #        print('files=({})'.format(' '.join(dicom_files)),file=f)
@@ -372,7 +401,7 @@ def main():
 #        print('pred_gini_impurity=({})'.format(l2str(pred_gini_impurity)),file=f)
 #        print('pred_margin_confidence=({})'.format(l2str(pred_margin_confidence)),file=f)
     
-    d={'files':dicom_files,'labels':labels,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+    d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
     
     with open('classification_output.csv',mode='w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=d.keys())
