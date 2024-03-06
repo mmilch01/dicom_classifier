@@ -99,6 +99,37 @@ resolve_subject() {
     echo $subject_label
 }
 
+update_csv_with_tags() {
+    local csv_file=$1
+    local tag_list=($2)
+    local temp_file=$(mktemp)
+    # Create headers for new columns, replacing commas in tags with underscores
+    for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
+    local headers=$(IFS=,; echo "${tag_list_filtered[*]}")
+    # Add new headers to the temp file
+    read -r first_line < list.csv
+    first_line=$(echo "$first_line" | tr -d '\r\n')
+    echo $first_line,$headers > "$temp_file"
+    n=0
+    # Skip the header line and process the rest of the file
+    tail -n +2 "$csv_file" | while IFS=, read -r file others; do
+        new_line="$file,$others"
+        tag_values=$(dcminfo_dcmtk "$file" ${tag_list[@]} -f)
+        for tag_value in ${tag_values[@]}; do
+            safe_tag_value=$(echo -n "$tag_value" | tr -d '\r\n' | sed 's/,/_/g')
+            new_line=$(echo "$new_line" | tr -d '\r\n')
+            new_line="${new_line},${safe_tag_value}"
+        done
+        ((n++))
+        echo -ne "Row $n\033[0K\r"
+        # Append the new line to the temp file
+        echo "$new_line" >> "$temp_file"
+        # Move the temporary file to the original CSV file
+        mv "$temp_file" "$csv_file"
+    done
+}
+
+
 if [ -z "$2" ]; then 
 
 	echo "usage: run_classifier_xnat <input dir> <configuration_file> [options]"
@@ -122,6 +153,8 @@ if [ -z "$2" ]; then
 	echo "  -subject    <XNAT subject>      Required for single-experiment mode [online mode]"
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
 	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
+    echo "  -tags_out   group1,elem1[;<group2,elem2>;...]"
+    echo "                                  List of DICOM tags to output in the resulting csv"
 	
 	exit -1
 fi
@@ -146,6 +179,7 @@ verbose=0
 file_list_defined=0
 
 input_file_list=$out_dir/input_file_list.txt
+tags_out=()
 
 while [ -n "$1" ]; do
     case $1 in
@@ -156,9 +190,10 @@ while [ -n "$1" ]; do
         -pass)      shift; xnat_pass=$1; shift ;;
         -subject)   shift; subject_id=$1; shift ;;
         -experiment) shift; experiment_id=$1; shift ;;
-        -output)    echo "output arg"; shift; out_dir=$1; shift ;;
-        -verbose)   echo "verbose arg"; shift; verbose=$1; shift ;;
-        -file_index) echo "file index arg"; shift; input_file_list=$1; file_list_defined=1; shift ;;
+        -output)    shift; out_dir=$1; shift ;;
+        -verbose)   shift; verbose=$1; shift ;;
+        -file_index) shift; input_file_list=$1; file_list_defined=1; shift ;;
+        -tags_out)  shift; IFS=';' read -r -a tags_out <<< $1; shift ;;
         *) echo "argument: $1, shifting" shift ;;
     esac
 done
@@ -265,9 +300,14 @@ tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
 if [ -d "$out_dir" ]; then 
 	mv classification_output.csv $out_dir/$tfile
 fi
-echo "Done."
+
 #rcsv classification_output.csv classification_output.sh
 #source classification_output.sh
+if [ -n "$tags_out" ]; then
+    echo "updating the output csv with requested DICOM tags..."
+    update_csv_with_tags "$out_dir/$tfile" "${tags_out[@]}"
+fi
+echo "Done."
 exit 0
 if (( file_list_defined == 1 )); then 
     echo "XNAT processing will not run since local file list was specified."
