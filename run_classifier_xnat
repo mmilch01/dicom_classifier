@@ -229,7 +229,7 @@ experiment_list=()
 scan_list=()
 file_list=()
 valid_list=()
-echo $file_list_defined
+echo file_list_defined: $file_list_defined
 if (( file_list_defined == 0 )); then 
     process_directories "$main_input_dir"
 
