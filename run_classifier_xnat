@@ -107,7 +107,7 @@ update_csv_with_tags() {
     for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
     local headers=$(IFS=,; echo "${tag_list_filtered[*]}")
     # Add new headers to the temp file
-    read -r first_line < list.csv
+    read -r first_line < $csv_file
     first_line=$(echo "$first_line" | tr -d '\r\n')
     echo $first_line,$headers > "$temp_file"
     n=0
