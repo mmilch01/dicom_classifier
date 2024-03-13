@@ -159,7 +159,7 @@ if [ -z "$2" ]; then
 	echo "  -subject    <XNAT subject>      Required for single-experiment mode [online mode]"
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
 	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
-    echo "  -tags_out   group1,elem1[;<group2,elem2>;...]"
+    echo "  -tags_out   \"group1,elem1[;<group2,elem2>;...]\""
     echo "                                  List of DICOM tags to output in the resulting csv"
 	
 	exit -1
@@ -199,10 +199,14 @@ while [ -n "$1" ]; do
         -output)    shift; out_dir=$1; shift ;;
         -verbose)   shift; verbose=$1; shift ;;
         -file_index) shift; input_file_list=$1; file_list_defined=1; shift ;;
-        -tags_out)  shift; IFS=';' read -r -a tags_out <<< $1; shift ;;
+        -tags_out)  shift; IFS=';' read -r -a tags_out <<< "$1"; shift ;;
+        -tag_out)   shift; tags_out+=($1); shift ;;
         *) echo "argument: $1, shifting" shift ;;
     esac
 done
+
+echo tags_out: "${tags_out[@]}"
+
 
 if [ ! -d "$out_dir" ]; then
     mkdir -p $out_dir
