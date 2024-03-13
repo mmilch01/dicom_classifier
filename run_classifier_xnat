@@ -99,22 +99,27 @@ resolve_subject() {
     echo $subject_label
 }
 
-update_csv_with_tags() {
-    local csv_file=$1
-    local tag_list=($2)
-    local temp_file=$(mktemp)
-    # Create headers for new columns, replacing commas in tags with underscores
-    for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
-    local headers=$(IFS=,; echo "${tag_list_filtered[*]}")
+
+update_csv_with_tags()
+{
+	local csv_file="$1" tag_list=($2) temp_file=$(mktemp) tag_list_filtered first_line new_line
+	# Create headers for new columns, replacing commas in tags with underscores
+	for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
+	local headers=$(IFS=,; echo "${tag_list_filtered[*]}")
+	echo tag_list: ${tag_list[@]}
+	echo tag_list_filtered: ${tag_list_filtered[@]}
+	echo headers: $headers
+	
     # Add new headers to the temp file
-    read -r first_line < $csv_file
-    first_line=$(echo "$first_line" | tr -d '\r\n')
-    echo $first_line,$headers > "$temp_file"
+    read -r first_line < list.csv
+    first_line=$(echo "$first_line" | tr -d '\r\n')	
+	echo $first_line,$headers > "$temp_file"
+	local n fil others tag_values tag_value safe_tag_value
     n=0
-    # Skip the header line and process the rest of the file
-    tail -n +2 "$csv_file" | while IFS=, read -r file others; do
-        new_line="$file,$others"
-        tag_values=$(dcminfo_dcmtk "$file" ${tag_list[@]} -f)
+    # Skip the header line and process the rest of the file    
+    tail -n +2 "$csv_file" | while IFS=, read -r fil others; do
+        new_line="$fil,$others"
+        tag_values=$(dcminfo_dcmtk "$fil" ${tag_list[@]} -f)
         for tag_value in ${tag_values[@]}; do
             safe_tag_value=$(echo -n "$tag_value" | tr -d '\r\n' | sed 's/,/_/g')
             new_line=$(echo "$new_line" | tr -d '\r\n')
@@ -124,9 +129,10 @@ update_csv_with_tags() {
         echo -ne "Row $n\033[0K\r"
         # Append the new line to the temp file
         echo "$new_line" >> "$temp_file"
-        # Move the temporary file to the original CSV file
-        mv "$temp_file" "$csv_file"
+        #if (( n>3 )); then break; fi
     done
+    # Move the temporary file to the original CSV file    
+    mv "$temp_file" "$csv_file"
 }
 
 
@@ -303,9 +309,10 @@ fi
 
 #rcsv classification_output.csv classification_output.sh
 #source classification_output.sh
+tags_out="${tags_out[@]}"
 if [ -n "$tags_out" ]; then
     echo "updating the output csv with requested DICOM tags..."
-    update_csv_with_tags "$out_dir/$tfile" "${tags_out[@]}"
+    update_csv_with_tags "$out_dir/$tfile" "$tags_out"
 fi
 echo "Done."
 exit 0
