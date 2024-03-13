@@ -111,7 +111,7 @@ update_csv_with_tags()
 	echo headers: $headers
 	
     # Add new headers to the temp file
-    read -r first_line < list.csv
+    read -r first_line < $csv_file
     first_line=$(echo "$first_line" | tr -d '\r\n')	
 	echo $first_line,$headers > "$temp_file"
 	local n fil others tag_values tag_value safe_tag_value
