@@ -36,7 +36,7 @@ process_directories() {
   
   #check for type 0 pattern (single scan)
   if [[ -d "$input_dir/DICOM" ]]; then
-    if (( verbose )); then echo "found single scan dir, type 0"; fi
+        if (( verbose )); then echo "found single scan dir, type 0"; fi
         input_type=0
         #local scan_id=$(basename "$scan_dir")
         #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
@@ -54,9 +54,8 @@ process_directories() {
 	        echo "middle file path under $input_dir/DICOM (type 2, $a files): $file_path"
 	    fi
         type2_array+=("$scan_id,$file_path")
-    fi    
-    return
-  fi
+        return
+  fi    
 
   # Check for type 2 pattern (single experiment)
   if [[ -d "$input_dir/SCANS" ]]; then
@@ -131,7 +130,7 @@ extract_ids() {
     local path="$2"
     
     # Remove the /input prefix from the path for easier manipulation
-    local trimmed_path="${path#/input}"
+    local trimmed_path="${path#/input}" temp
     
     case "$type" in
         0)
@@ -149,10 +148,10 @@ extract_ids() {
         1)
             # Extract both SCAN_ID and EXPERIMENT_ID from the path
             # Assumes path format: /input/<EXPERIMENT_ID>/SCANS/<SCAN_ID>/DICOM/<arbitrary string>
-            EXPERIMENT_ID="${trimmed_path#*/}"
-            EXPERIMENT_ID="${EXPERIMENT_ID%%/*}"
-            trimmed_path="${trimmed_path#*/SCANS/}"
-            SCAN_ID="${trimmed_path%%/*}"
+            temp="${trimmed_path%%/SCANS/*}"
+            EXPERIMENT_ID="${temp##*/}"
+            temp="${path##*/SCANS/}"
+            SCAN_ID="${temp%%/DICOM/*}"
             ;;
         *)
             echo "Invalid type"
@@ -160,7 +159,7 @@ extract_ids() {
             ;;
     esac
 
-    echo "EXPERIMENT_ID: $EXPERIMENT_ID, SCAN_ID: $SCAN_ID"
+    #echo "EXPERIMENT_ID: $EXPERIMENT_ID, SCAN_ID: $SCAN_ID"
 }
 
 update_csv_with_tags()
@@ -252,13 +251,13 @@ out_dir=/output
 verbose=0
 file_list_defined=0
 
-input_file_list=$out_dir/input_file_list.txt
+
 tags_out=()
 
-project_id=unknown
-subject_id=unknown
-experiment_id=unknown
-scan_id=unknown
+project_id=NA
+subject_id=NA
+experiment_id=NA
+scan_id=NA
 
 while [ -n "$1" ]; do
     case $1 in
@@ -278,7 +277,9 @@ while [ -n "$1" ]; do
         *) echo "argument: $1, shifting" shift ;;
     esac
 done
-
+if (( file_list_defined == 0 )); then 
+    input_file_list=$out_dir/input_file_list.txt    
+fi
 echo tags_out: "${tags_out[@]}"
 
 
