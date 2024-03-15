@@ -33,9 +33,63 @@ function get_middle_dcm_file () {
 # Function to populate arrays based on directory type
 process_directories() {
   local input_dir="$1"
+  
+  #check for type 0 pattern (single scan)
+  if [[ -d "$input_dir/DICOM" ]]; then
+    if (( verbose )); then echo "found single scan dir, type 0"; fi
+        input_type=0
+        #local scan_id=$(basename "$scan_dir")
+        #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+        #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+        #local file_path=$(find $scan_dir/DICOM/ -maxdepth 1 -type f -name "*.dcm" | head -n 1)
+        local file_path=$(get_middle_dcm_file "$input_dir/DICOM")
+
+        if [ ! -f "$file_path" ]; then 
+            echo "WARNING: no DICOM files under $input_dir/DICOM, skipping"
+            continue
+        fi
+                
+	    if (( verbose )); then 
+    	    a=$(ls $input_dir/DICOM | wc); a=($a)
+	        echo "middle file path under $input_dir/DICOM (type 2, $a files): $file_path"
+	    fi
+        type2_array+=("$scan_id,$file_path")
+    fi    
+    return
+  fi
+
+  # Check for type 2 pattern (single experiment)
+  if [[ -d "$input_dir/SCANS" ]]; then
+    for scan_dir in "$input_dir/SCANS"/*; do
+      if (( verbose )); then echo "found $scan_dir under SCANS, type 2"; fi
+      if [[ -d "$scan_dir/DICOM" ]]; then
+	if (( verbose )); then echo "found DICOM dir under $scan_dir, type 2"; fi
+        input_type=2
+        local scan_id=$(basename "$scan_dir")
+        #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
+        #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
+        #local file_path=$(find $scan_dir/DICOM/ -maxdepth 1 -type f -name "*.dcm" | head -n 1)
+        local file_path=$(get_middle_dcm_file "$scan_dir/DICOM")
+
+        if [ ! -f "$file_path" ]; then 
+            echo "WARNING: no DICOM files under $scan_dir/DICOM, skipping"
+            continue
+        fi
+                
+	    if (( verbose )); then 
+    	    a=$(ls $scan_dir/DICOM | wc); a=($a)
+	        echo "middle file path under $scan_dir/DICOM (type 2, $a files): $file_path"
+	    fi
+        type2_array+=("$scan_id,$file_path")
+      fi
+    done
+    return
+  fi
+
+  #check for type 1 pattern (multiple experiments)
   for dir in "$input_dir"/*; do
     if [[ -d "$dir" ]]; then
-      local experiment_label=$(basename "$dir")
+      local experiment_label=$(basename "$dir")      
       # Check if it matches type 1 pattern
       if [[ -d "$dir/SCANS" ]]; then	
         for scan_dir in "$dir/SCANS"/*; do
@@ -62,34 +116,7 @@ process_directories() {
         done
       fi
     fi
-  done
-  
-  # Check for type 2 pattern
-  if [[ -d "$input_dir/SCANS" ]]; then
-    for scan_dir in "$input_dir/SCANS"/*; do
-      if (( verbose )); then echo "found $scan_dir under SCANS, type 2"; fi
-      if [[ -d "$scan_dir/DICOM" ]]; then
-	if (( verbose )); then echo "found DICOM dir under $scan_dir, type 2"; fi
-        input_type=2
-        local scan_id=$(basename "$scan_dir")
-        #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
-        #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
-        #local file_path=$(find $scan_dir/DICOM/ -maxdepth 1 -type f -name "*.dcm" | head -n 1)
-        local file_path=$(get_middle_dcm_file "$scan_dir/DICOM")
-
-        if [ ! -f "$file_path" ]; then 
-            echo "WARNING: no DICOM files under $scan_dir/DICOM, skipping"
-            continue
-        fi
-                
-	    if (( verbose )); then 
-    	    a=$(ls $scan_dir/DICOM | wc); a=($a)
-	        echo "middle file path under $scan_dir/DICOM (type 2, $a files): $file_path"
-	    fi
-        type2_array+=("$scan_id,$file_path")
-      fi
-    done
-  fi
+  done  
 }
 
 resolve_subject() {
@@ -99,13 +126,49 @@ resolve_subject() {
     echo $subject_label
 }
 
+extract_ids() {
+    local type="$1"
+    local path="$2"
+    
+    # Remove the /input prefix from the path for easier manipulation
+    local trimmed_path="${path#/input}"
+    
+    case "$type" in
+        0)
+            # Use global variables directly
+            SCAN_ID="$scan_id"
+            EXPERIMENT_ID="$experiment_id"
+            ;;
+        2)
+            # Extract SCAN_ID from the path
+            # Assumes path format: /input/SCANS/<SCAN_ID>/DICOM/<arbitrary string>
+            SCAN_ID="${trimmed_path#*/SCANS/}"
+            SCAN_ID="${SCAN_ID%%/*}"
+            EXPERIMENT_ID="$experiment_id"
+            ;;
+        1)
+            # Extract both SCAN_ID and EXPERIMENT_ID from the path
+            # Assumes path format: /input/<EXPERIMENT_ID>/SCANS/<SCAN_ID>/DICOM/<arbitrary string>
+            EXPERIMENT_ID="${trimmed_path#*/}"
+            EXPERIMENT_ID="${EXPERIMENT_ID%%/*}"
+            trimmed_path="${trimmed_path#*/SCANS/}"
+            SCAN_ID="${trimmed_path%%/*}"
+            ;;
+        *)
+            echo "Invalid type"
+            return 1
+            ;;
+    esac
+
+    echo "EXPERIMENT_ID: $EXPERIMENT_ID, SCAN_ID: $SCAN_ID"
+}
 
 update_csv_with_tags()
 {
 	local csv_file="$1" tag_list=($2) temp_file=$(mktemp) tag_list_filtered first_line new_line
 	# Create headers for new columns, replacing commas in tags with underscores
 	for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
-	local headers=$(IFS=,; echo "${tag_list_filtered[*]}")
+	local headers=$(IFS=,; echo "${tag_list_filtered[*]}"),experiment,scan    
 	echo tag_list: ${tag_list[@]}
 	echo tag_list_filtered: ${tag_list_filtered[@]}
 	echo headers: $headers
@@ -125,10 +188,12 @@ update_csv_with_tags()
             new_line=$(echo "$new_line" | tr -d '\r\n')
             new_line="${new_line},${safe_tag_value}"
         done
+        #set experiment and scan ID's either from the path or globally pre-set variables.
+        extract_ids $input_type "$fil"
         ((n++))
         echo -ne "Row $n\033[0K\r"
         # Append the new line to the temp file
-        echo "$new_line" >> "$temp_file"
+        echo "$new_line,$EXPERIMENT_ID,$SCAN_ID" >> "$temp_file"
         #if (( n>3 )); then break; fi
     done
     # Move the temporary file to the original CSV file    
@@ -139,13 +204,15 @@ update_csv_with_tags()
 if [ -z "$2" ]; then 
 
 	echo "usage: run_classifier_xnat <input dir> <configuration_file> [options]"
-	echo "Runs in offline mode unless  XNAT credentials and required XNAT fields are specified."
+	echo "Runs in offline mode unless XNAT credentials and required XNAT fields are specified."
 	echo "In online mode, sets the 'scan type' XNAT field to the inferred type."
 	echo "The input configuration file must point to correct model, nomenclature and tokenizer files."
 	
-	echo "Can run on a single or multiple experiment directory (directory structure conforms to container service project or experiment mounts)"
+	echo "Can run on the following directory structures (directory structure conforms to container service mounts):"
+    echo "scan directory: <input_dir>/DiCOM/{DICOM files}"
 	echo "single experiment directory: <input_dir>/SCANS/{scan ID}/DICOM/{DICOM files}"
 	echo "multi-experiment directory: <input_dir>/{experiment ID}/SCANS/{scan ID}/DICOM/{DICOM files}"
+
 	echo "required Python modules (autoencoder_models.py and dependencies) must be accessible under $PYLIB directory"
 	
 	echo "options:"
@@ -158,6 +225,7 @@ if [ -z "$2" ]; then
 	echo "  -pass       <XNAT password>     This or JSESSION is required in online mode"
 	echo "  -subject    <XNAT subject>      Required for single-experiment mode [online mode]"
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
+    echo "  -scan       <XNAT scan ID>      Required for single-scan mode [online mode]"
 	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
     echo "  -tags_out   \"group1,elem1[;<group2,elem2>;...]\""
     echo "                                  List of DICOM tags to output in the resulting csv"
@@ -187,6 +255,11 @@ file_list_defined=0
 input_file_list=$out_dir/input_file_list.txt
 tags_out=()
 
+project_id=unknown
+subject_id=unknown
+experiment_id=unknown
+scan_id=unknown
+
 while [ -n "$1" ]; do
     case $1 in
         -server)    shift; xnat_server=$1; shift ;;
@@ -196,6 +269,7 @@ while [ -n "$1" ]; do
         -pass)      shift; xnat_pass=$1; shift ;;
         -subject)   shift; subject_id=$1; shift ;;
         -experiment) shift; experiment_id=$1; shift ;;
+        -scan)      shift; scan_id=$1; shift ;;
         -output)    shift; out_dir=$1; shift ;;
         -verbose)   shift; verbose=$1; shift ;;
         -file_index) shift; input_file_list=$1; file_list_defined=1; shift ;;
@@ -234,6 +308,7 @@ fi
 declare -A type1_array
 # Indexed array holding scan_id,first_DICOM_file 
 type2_array=()
+type0_array=()
 input_type=-1
 experiment_list=()
 scan_list=()
@@ -242,7 +317,6 @@ valid_list=()
 echo file_list_defined: $file_list_defined
 if (( file_list_defined == 0 )); then 
     process_directories "$main_input_dir"
-
     if (( input_type==1 )); then
         keys=(${!type1_array[@]})
         for (( i=0; i<${#type1_array[@]}; i++ )); do
@@ -253,7 +327,7 @@ if (( file_list_defined == 0 )); then
             scan_list+=(${tuple[0]})
             file_list+=(${tuple[1]})
         done
-    else
+    elif ((input_type==2 || input_type==0)); then
         for entry in ${type2_array[@]}; do
             IFS=',' read -ra tuple <<< "$entry"
             scan_list+=(${tuple[0]})
