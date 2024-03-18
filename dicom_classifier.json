@@ -1,13 +1,13 @@
 {
-  "name": "benice",
-  "label": "DICOM_LM_classifier v0.1",
+  "name": "DICOM_LM_classifier",
+  "label": "DICOM_LM_CLASSIFIER v0.1",
   "description": "Runs DICOM LM classifier",
   "version": "0.1",
   "schema-version": "1.0",
   "info-url": "",
   "image": "registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier:0.1",
   "type": "docker",
-  "command-line": "\"run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf\"",
+  "command-line": "run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf -verbose 0 -tag_out 0018,0015 -tag_out 0008,0060 -tag_out 0054,0016",
   "override-entrypoint": true,
   "mounts": [
     {
@@ -41,60 +41,89 @@
         "xnat:projectData"
       ],
       "external-inputs": [
-      {
-        "name": "project",
-        "description": "Input project",
-        "type": "Project",
-        "required": true,
-        "provides-files-for-command-mount": "in",
-        "load-children": false
-      }
+        {
+          "name": "project",
+          "description": "Input project",
+          "type": "Project",
+          "required": true,
+          "provides-files-for-command-mount": "in",
+          "load-children": false
+        }
       ],
       "derived-inputs": [],
       "output-handlers": [
         {
-            "name": "output-resource",
-            "accepts-command-output": "output",
-            "as-a-child-of": "project",
-            "type": "Resource",
-            "label": "DICOM_LM_CLASSIFIER_OUTPUT",
-            "tags": []
+          "name": "output-resource",
+          "accepts-command-output": "output",
+          "as-a-child-of": "project",
+          "type": "Resource",
+          "label": "DICOM_LM_CLASSIFIER_OUTPUT",
+          "tags": []
         }
       ]
     },
     {
-        "name": "DICOM LM classifier (experiment)",
-        "label": "DICOM LM classifier (experiment)",
-        "description": "Run DICOM LM classifier on experiment data",
-        "contexts": [
-          "xnat:imageSessionData"
-        ],
-        "external-inputs": [
+      "name": "DICOM LM classifier (experiment)",
+      "label": "DICOM LM classifier (experiment)",
+      "description": "Run DICOM LM classifier on experiment data",
+      "contexts": [
+        "xnat:imageSessionData"
+      ],
+      "external-inputs": [
         {
           "name": "session",
           "description": "Input session",
           "type": "Session",
           "required": true,
           "provides-files-for-command-mount": "in",
-          "load-children": false        
+          "load-children": false
         }
-        ],
-        "derived-inputs": [],
-        "output-handlers": [
-          {
-              "name": "output-resource",
-              "accepts-command-output": "output",
-              "as-a-child-of": "session",
-              "type": "Resource",
-              "label": "DICOM_LM_CLASSIFIER_OUTPUT",
-              "tags": []
-          }
-        ]
-      }
+      ],
+      "derived-inputs": [],
+      "output-handlers": [
+        {
+          "name": "output-resource",
+          "accepts-command-output": "output",
+          "as-a-child-of": "session",
+          "type": "Resource",
+          "label": "DICOM_LM_CLASSIFIER_OUTPUT",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "name": "DICOM LM classifier (scan)",
+      "label": "DICOM LM classifier (scan)",
+      "description": "Run DICOM LM classifier on scan data",
+      "contexts": [
+        "xnat:imageScanData"
+      ],
+      "external-inputs": [
+        {
+          "name": "scan",
+          "description": "Input scan",
+          "type": "Scan",
+          "required": true,
+          "provides-files-for-command-mount": "in",
+          "load-children": false
+        }
+      ],
+      "derived-inputs": [],
+      "output-handlers": [
+        {
+          "name": "output-resource",
+          "accepts-command-output": "output",
+          "as-a-child-of": "scan",
+          "type": "Resource",
+          "label": "DICOM_LM_CLASSIFIER_OUTPUT",
+          "tags": []
+        }
+      ]
+    }
   ],
-
   "reserve-memory": 12284,
   "container-labels": {},
   "generic-resources": {},
-  "ulimits": {}
+  "ulimits": {},
+  "secrets": []
 }
