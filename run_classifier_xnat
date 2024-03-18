@@ -85,6 +85,7 @@ process_directories() {
     return
   fi
 
+  local n=0
   #check for type 1 pattern (multiple experiments)
   for dir in "$input_dir"/*; do
     if [[ -d "$dir" ]]; then
@@ -112,6 +113,10 @@ process_directories() {
 	        fi
             type1_array["$experiment_label"]="$scan_id,$file_path"
           fi
+	  (( n++ ))
+	  if (( n % 100 == 0 )); then 
+		echo -ne "Found $n files\033[0K\r"
+	  fi
         done
       fi
     fi
@@ -317,6 +322,7 @@ file_list=()
 valid_list=()
 echo file_list_defined: $file_list_defined
 if (( file_list_defined == 0 )); then 
+    echo "Collecting DICOM files."
     process_directories "$main_input_dir"
     if (( input_type==1 )); then
         keys=(${!type1_array[@]})
