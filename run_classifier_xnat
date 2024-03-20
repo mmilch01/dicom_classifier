@@ -380,14 +380,19 @@ if (( determine_modalities )); then
     done
 fi
 
-
 echo "Running classifier."
-# Run autoencoder_models.py to infer scan types
-echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file"
-python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+if [ "$model_type" == "foundational" ]; then 
+    # Run model to infer scan types
+    echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file"
+    python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+elif [ "$model_type" == "fully_connected" ]; then 
+    echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file"
+    python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file"
+else 
+    handle_error "Unknown model type"
+fi
 
 tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
-
 if [ -d "$out_dir" ]; then 
 	mv classification_output.csv $out_dir/$tfile
 fi

@@ -347,7 +347,7 @@ class AttentionModel:
             except Exception as e:
                 print('no series description for file',i)
                 
-        print('Predicted labels:',pred_class1)        
+        print('Predicted labels:',pred_class1)
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
         
 def parse_args():
