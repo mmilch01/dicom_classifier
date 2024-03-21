@@ -296,18 +296,20 @@ class AttentionModel:
         scan_types=self.load_nomenclature(nomenclature_file)
         pred=self.classification_model.predict(self.sequences)
 
-        print('pred:',pred)
+	max_len=min(10,len(pred))
+        print('pred (first 10):',pred[:max_len])
+
         #pred_ord=np.argmax(pred,1)
         pred_ord=np.argsort(-pred,axis=1)
 
-        print('pred_ord:',pred_ord)
+        #print('pred_ord:',pred_ord)
 
         label_encoder = LabelEncoder()
         label_encoder.fit_transform(self.load_nomenclature(nomenclature_file))                                    
         pred_inv0=label_encoder.inverse_transform(pred_ord[:,0])
-        print('pred_inv0:',pred_inv0)
+        print('pred_inv0 (first 10):',pred_inv0[:max_len])
         pred_inv1=label_encoder.inverse_transform(pred_ord[:,1])
-        print('pred_inv1:',pred_inv1)
+        print('pred_inv1 (first 10):',pred_inv1[:max_len])
         #out_label=[]
         series_descriptions=[]
         #prediction quality metrics
@@ -348,7 +350,7 @@ class AttentionModel:
                 series_descriptions+=['NA']
                 print('no series description for file',i)
                 
-        print('Predicted labels:',pred_class1)
+        print('Predicted labels (first 10):',pred_class1[:max_len])
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
         
 def parse_args():
