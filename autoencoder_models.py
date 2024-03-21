@@ -345,6 +345,7 @@ class AttentionModel:
             try:
                 series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
             except Exception as e:
+                series_descriptions+=['NA']
                 print('no series description for file',i)
                 
         print('Predicted labels:',pred_class1)

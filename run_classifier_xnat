@@ -54,6 +54,7 @@ process_directories() {
 	        echo "middle file path under $input_dir/DICOM (type 2, $a files): $file_path"
 	    fi
         type2_array+=("$scan_id,$file_path")
+	echo "found 1 DICOM file"
         return
   fi    
 
@@ -79,9 +80,10 @@ process_directories() {
     	    a=$(ls $scan_dir/DICOM | wc); a=($a)
 	        echo "middle file path under $scan_dir/DICOM (type 2, $a files): $file_path"
 	    fi
-        type2_array+=("$scan_id,$file_path")
+        type2_array+=("$scan_id,$file_path")	
       fi
     done
+    echo "found ${#type2_array[@]} DICOM files"
     return
   fi
 
@@ -118,13 +120,14 @@ process_directories() {
 	    fi
           fi
 	  (( n++ ))
-	  if (( n % 100 == 0 )); then 
+	  if (( n % 500 == 0 )); then 
 		echo -ne "Found $n files\033[0K\r"
 	  fi
         done
       fi
     fi
-  done  
+  done
+  echo "Found $n DICOM files"
 }
 
 resolve_subject() {

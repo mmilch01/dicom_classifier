@@ -450,14 +450,16 @@ class UniversalScanClassifier:
 
     def infer_nn_ext(self,scans):
         vecs,ids=self.prepare_training_vectors_nn(scans,False)
-        pred=self.classifier.predict(vecs)        
+        pred=self.classifier.predict(vecs)
         print('pred:',pred)
         pred_ord=np.argsort(-pred,axis=1)
         print('pred_ord:',pred_ord)
         pred_inv0=[ self._scm._scan_types[pred_ord[i,0]] for i in range(len(pred)) ]
         pred_inv1=[ self._scm._scan_types[pred_ord[i,1]] for i in range(len(pred)) ]
-        print('pred_inv0:',pred_inv0)
-        print('pred_inv1:',pred_inv1)
+
+        max_len=min(len(pred),10)
+        print('pred_inv0, first 10:',pred_inv0[:max_len])
+        print('pred_inv1, first 10:',pred_inv1[:max_len])
         
         pred_class1=[]
         pred_prob1=[]
@@ -483,8 +485,10 @@ class UniversalScanClassifier:
             try:
                 series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
             except Exception as e:
+                series_descriptions+=['NA']
                 print('no series description for file',i)
-        print('Predicted labels:',pred_class1)
+		
+        print('First 10 predicted labels:',pred_class1[:max_len])
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
     
     def infer_svm(self,scans):
@@ -775,9 +779,16 @@ def main():
         sys.exit(1)
         
     scans=usc.scans_from_files(dicom_files)
+    print("number of input scans:",len(scans))
     labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=usc.infer_nn_ext(scans)
+    print("lengths of output arrays:",len(labels1),len(probs1),len(labels2),len(probs2),len(pred_gini_impurity),len(pred_margin_confidence),len(series_descriptions))
+
     
     d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+
+    if len(scans) != len(labels1): 
+        print("ERROR: number of input files doesn't match the number of labels, output invalid!")
+        return 1	
     
     with open('classification_output.csv',mode='w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=d.keys())
