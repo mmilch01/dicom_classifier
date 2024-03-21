@@ -1,29 +1,26 @@
 # -*- coding: utf-8 -*-
 import getpass, ipywidgets as ipw, os, json, shlex, io, re, tempfile, subprocess,unittest, argparse
-import pydicom,numpy as np,csv,warnings,pickle,sys,tensorflow as tf
+import pydicom,numpy as np,csv,warnings,pickle,sys
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
+
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
 from tensorflow.keras import backend as K
-from IPython.display import FileLink
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+
 from matplotlib import pyplot as plt
 from zipfile import ZipFile
-
-
-warnings.filterwarnings('ignore')
-warnings.simplefilter('ignore')
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 #%load_ext autoreload
 #%autoreload 2
 
-module_path = os.path.abspath(os.path.join('..'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
-from juxnat_lib.xnat_utils import *
+from juxnat_lib import xnat_utils
+
 
 """
 Created on Mon Dec 12 15:45:06 2022
@@ -740,9 +737,10 @@ def parse_args():
     parser.add_argument('--nomenclature_file', type=str, help='nomenclature file',required=True)
     
     return parser.parse_args()
+
+
             
 def main():
-    print("1")
     args = parse_args()
     #dicom_files = args.dicom_files
     dicom_files=[]
@@ -785,3 +783,5 @@ def main():
         for row in zip(*d.values()): w.writerow(dict(zip(d.keys(),row)))
         
     
+if __name__ == '__main__':
+    main()

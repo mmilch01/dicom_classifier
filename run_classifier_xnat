@@ -387,7 +387,7 @@ if [ "$model_type" == "foundational" ]; then
     python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
 elif [ "$model_type" == "fully_connected" ]; then 
     echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file"
-    python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file"
+    python3 $PYLIB/universal_scan_classifier.py --file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file
 else 
     handle_error "Unknown model type"
 fi
