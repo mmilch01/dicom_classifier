@@ -4,13 +4,6 @@ FROM centos:7.5.1804
 #RUN yum -y install https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch.rpm
 RUN yum -y install epel-release
 
-#RUN cd /etc/yum.repos.d/
-#RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-#RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-#RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-#RUN yum -y install https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch.rpm
-#RUN yum -y install https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
-
 
 RUN yum -y install bc wget curl epel-release which tree
 RUN yum -y install CharLS libtiff libXfont zip
@@ -40,22 +33,18 @@ RUN pip install pydicom scikit-learn ipywidgets matplotlib
 
 RUN mkdir -p /nrgpackages/packages/tensorflow2.13-cpu
 RUN mkdir -p /models/model_mirrir_1351062s_15Kt.10.04.2023
+RUN mkdir -p /models/model_fc_39374-600.03.20.2024
 RUN mkdir -p /output
 RUN mkdir -p /input
 
 COPY src /src
 COPY model_mirrir_1351062s_15Kt.10.04.2023 /models/model_mirrir_1351062s_15Kt.10.04.2023
+COPY model_fc_39374-600.03.20.2024 /models/model_fc_39374-600.03.20.2024
+
 ENV PYLIB=/src
 
 RUN rm -rf /tmp/* /var/cache/yum
 
 WORKDIR /output
-
-#ENV RELEASE=/nrgpackages/tools/nil-tools REFDIR=/nrgpackages/atlas
-#ENV MFREL=/nrgpackages/tools/nrg-improc MFSCRIPT=/nrgpackages/tools/nrg-improc MFCONDR=/nrgpackages/tools/nrg-improc/CONDR
-#ENV MRICRON_HOME=/nrgpackages/tools/mricron
-#ENV PATH=/usr/local/miniconda3/bin:/nrgpackages/tools/nrg-improc:/nrgpackages/tools/nrg-improc/CONDR:/nrgpackages/tools/nil-tools:/nrgpackages/tools/mricron:$PATH
-#RUN cp -l /nrgpackages/tools/mricron/dcm2niix /nrgpackages/tools/mricron/dcm2nii
-#RUN chmod +x /nrgpackages/tools/mricron/dcm2nii && chmod +x /nrgpackages/tools/mricron/dcm2niix
 
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]

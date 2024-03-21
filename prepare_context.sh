@@ -9,8 +9,8 @@ pushd juxnat_lib
         git pull
 popd
 
-mkdir -p src
-cp juxnat_lib/xnat_utils.py src/
+mkdir -p src/juxnat_lib
+cp -r juxnat_lib/*.py src/juxnat_lib/
 cp *.py src/
 
 echo chmod -R o+rX `pwd`
