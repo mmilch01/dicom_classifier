@@ -111,7 +111,11 @@ process_directories() {
     	        a=$(ls $scan_dir/DICOM | wc); a=($a)
 	            echo "middle file path under $scan_dir/DICOM (type 1, $a files): $file_path"
 	        fi
-            type1_array["$experiment_label"]="$scan_id,$file_path"
+	    if [ -z "${type1_array[$experiment_label]}" ]; then 
+		type1_array[$experiment_label]="$scan_id,$file_path"
+	    else
+	        type1_array[$experiment_label]+=";$scan_id,$file_path"
+	    fi
           fi
 	  (( n++ ))
 	  if (( n % 100 == 0 )); then 
@@ -328,12 +332,16 @@ if (( file_list_defined == 0 )); then
         keys=(${!type1_array[@]})
         for (( i=0; i<${#type1_array[@]}; i++ )); do
             key=${keys[i]}
-            entry=${type1_array[$key]}        
-            IFS=',' read -ra tuple <<< "$entry"
-            experiment_list+=($key)
-            scan_list+=(${tuple[0]})
-            file_list+=(${tuple[1]})
-        done
+            entry=${type1_array[$key]}
+	    #get the scan list.
+	    IFS=';' read -ra scan_list <<< "$entry"
+	    for scan in ${scan_list[@]}; do
+		    experiment_list+=($key)
+	            IFS=',' read -ra tuple <<< "$scan"
+	            scan_list+=(${tuple[0]})
+        	    file_list+=(${tuple[1]})
+	     done
+         done
     elif ((input_type==2 || input_type==0)); then
         for entry in ${type2_array[@]}; do
             IFS=',' read -ra tuple <<< "$entry"
