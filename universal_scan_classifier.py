@@ -12,7 +12,7 @@ from tensorflow.keras import layers
 from tensorflow.keras import backend as K
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-
+from pathlib import Path
 from matplotlib import pyplot as plt
 from zipfile import ZipFile
 
@@ -531,11 +531,12 @@ class UniversalScanClassifier:
     def load_model_nn(self,zipfile):
         
         #zipfile_dir=os.path.dirname(zipfile)
-	zipfile_dir=tempfile.gettempdir()
-        with ZipFile(zipfile,'r') as zf:
+        zipfile_dir=tempfile.gettempdir()
+       	with ZipFile(zipfile,'r') as zf:
             zf.extractall(zipfile_dir)
             
-        rt=os.path.splitext(zipfile)[0]
+        rt=zipfile_dir+'/'+Path(zipfile).stem
+	#rt=os.path.splitext(zipfile)[0]
         vec_file,model_file=rt+'.vec',rt+'.hd5'
         
         self.vectorizer=pickle.load(open(vec_file,'rb'))
