@@ -530,7 +530,8 @@ class UniversalScanClassifier:
         
     def load_model_nn(self,zipfile):
         
-        zipfile_dir=os.path.dirname(zipfile)
+        #zipfile_dir=os.path.dirname(zipfile)
+	zipfile_dir=tempfile.gettempdir()
         with ZipFile(zipfile,'r') as zf:
             zf.extractall(zipfile_dir)
             
