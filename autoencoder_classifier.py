@@ -24,7 +24,7 @@ warnings.simplefilter('ignore')
 #%load_ext autoreload
 #%autoreload 2
 
-from xnat_utils import *
+from juxnat_lib import xnat_utils
 
 """
 Created on Mon Dec 12 15:45:06 2022

@@ -17,7 +17,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.utils import to_categorical
 
-from xnat_utils import *
+from juxnat_lib import *
 from autoencoder_classifier import DICOMAutoencoderModel
 
 """

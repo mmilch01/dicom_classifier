@@ -742,6 +742,7 @@ def parse_args():
     return parser.parse_args()
             
 def main():
+    print("1")
     args = parse_args()
     #dicom_files = args.dicom_files
     dicom_files=[]
