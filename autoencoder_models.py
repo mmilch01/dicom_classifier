@@ -285,8 +285,7 @@ class AttentionModel:
                 n+=1        
         print('misclassifications: {} out of {}'.format(n,m))
 
-    def classify_dicom_scans(self, dcm_file_list, tokenizer_file, model_file, nomenclature_file,confidence_level=0.95,unknown_label='UNKNOWN'):
-        scans=self.daem.scans_from_files(dcm_file_list)
+    def classify_dicom_scans(self, scans, tokenizer_file, model_file, nomenclature_file,confidence_level=0.95,unknown_label='UNKNOWN'):        
         self.tokenizer,self.classification_model=self.load_model(tokenizer_file,model_file)
         max_length=self.classification_model.layers[0].input_shape[0][1]
         sd=self.sequences=self.sequences_from_scans(scans,max_length)
@@ -296,7 +295,7 @@ class AttentionModel:
         scan_types=self.load_nomenclature(nomenclature_file)
         pred=self.classification_model.predict(self.sequences)
 
-	max_len=min(10,len(pred))
+        max_len=min(10,len(pred))
         print('pred (first 10):',pred[:max_len])
 
         #pred_ord=np.argmax(pred,1)
@@ -352,7 +351,31 @@ class AttentionModel:
                 
         print('Predicted labels (first 10):',pred_class1[:max_len])
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
+
+def parse_paths(paths, path_type):
+    '''
+    extract scan and experiment ID's from file paths, to put in the output csv.
+    '''
+    experiments,scans=[],[]
+    for path in paths:
+        experiment_id = 'NA'
+        scan_id = 'NA'
         
+        if path_type == 'project':
+            match = re.match(r'.*/([^/]+)/([^/]+)/SCANS/([^/]+)/DICOM/([^/]+)', path)
+            if match:
+                experiment_id = match.group(2)
+                scan_id = match.group(3)
+        elif path_type == 'experiment':
+            match = re.match(r'.*/SCANS/([^/]+)/DICOM/([^/]+)', path)
+            if match:
+                scan_id = match.group(1)
+                
+        experiments+=[experiment_id]
+        scans+=[scan_id]
+        
+    return experiments,scans
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Classify a list of DICOM files using a trained model.')
     #parser.add_argument('dicom_files', type=str, nargs='+', help='List of paths to DICOM files to be classified.')
@@ -360,7 +383,10 @@ def parse_args():
     parser.add_argument('--model_file', type=str, help='trained model file',required=True)
     parser.add_argument('--tokenizer_file', type=str, help='tokenizer file',required=True)
     parser.add_argument('--nomenclature_file', type=str, help='nomenclature file',required=True)
+    parser.add_argument('--path_type', type=str, help='XNAT path type (scan,experiment,project)',required=True)
+    parser.add_argument('--tag_out', type=str, action='append', help='optional DICOM tag (string name, can be repeated) to output in csv',required=False)
     return parser.parse_args()
+
 
 def l2str(arr):
     lst=[str(arr[i]) for i in range(0,len(arr))]
@@ -374,6 +400,8 @@ def main():
     model_file = args.model_file
     tokenizer_file = args.tokenizer_file
     nomenclature_file = args.nomenclature_file
+    tags_out=args.tag_out
+    path_type=args.path_type
     
     # Verify that the specified DICOM files exist
     if not os.path.exists(file_list):    
@@ -389,22 +417,20 @@ def main():
             print(f"Error: Specified DICOM file does not exist: {file}", file=sys.stderr)
             sys.exit(1)
             
-    print('classifying {} files.'.format(len(dicom_files)))
-    
     am=AttentionModel()
-    
-    #print('classify_dicom_scans {} {} {}'.format(dicom_files,tokenizer_file,model_file,nomenclature_file))
+    print('reading scans from DICOM')
+    scans=am.daem.scans_from_files(dcm_file_list)
+    print('running classification of {} scans.'.format(len(scans)))
     labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
-    
-#    with open('classification_output.txt','wt') as f:
-#        print('files=({})'.format(' '.join(dicom_files)),file=f)
-#        print('labels=({})'.format(' '.join(labels)),file=f)
-#        print('series_descriptions=({})'.format(' '.join(series_descriptions)),file=f)
-        #print('pred_entropy=({})'.format(' '.join(pred_entropy)),file=f)
-#        print('pred_gini_impurity=({})'.format(l2str(pred_gini_impurity)),file=f)
-#        print('pred_margin_confidence=({})'.format(l2str(pred_margin_confidence)),file=f)
-    
+        
     d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+
+    #add experiment and scan columns.    
+    d['experiment'],d['scan']=parse_paths(dicom_files,path_type)
+    
+    #append requested DICOM tags.
+    for tag in tags_out:
+        d[tag]=[ s[tag] if tag in s.keys() else 'NA' for s in scans ]
     
     with open('classification_output.csv',mode='w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=d.keys())

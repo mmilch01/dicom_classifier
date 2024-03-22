@@ -42,7 +42,7 @@ class ScanClassificationModel:
         #single word
         self._singleton_string_tags=['Modality','Manufacturer','ManufacturerModelName','BodyPartExamined',\
                                     'ScanningSequence','SequenceVariant','MRAcquisitionType','SequenceName',\
-                                    'MagneticFieldStrength','ImageType']
+                                    'MagneticFieldStrength','ImageType','Radiopharmaceutical']
         self._singleton_string_tags_xnat=['type','quality','condition','scanner','modality','ID']
         
         
@@ -741,9 +741,34 @@ def parse_args():
     parser.add_argument('--file_list', type=str, help='file with input DICOM file list', required=True)
     parser.add_argument('--model_file', type=str, help='trained model file (zip)',required=True)
     parser.add_argument('--nomenclature_file', type=str, help='nomenclature file',required=True)
+    parser.add_argument('--path_type', type=str, help='XNAT path type (scan,experiment,project)',required=True)
+    parser.add_argument('--tag_out', type=str, action='append', help='optional DICOM tag (string name, can be repeated) to output in csv',required=False)
     
     return parser.parse_args()
 
+def parse_paths(paths, path_type):
+    '''
+    extract scan and experiment ID's from file paths, to put in the output csv.
+    '''
+    experiments,scans=[],[]
+    for path in paths:
+        experiment_id = 'NA'
+        scan_id = 'NA'
+        
+        if path_type == 'project':
+            match = re.match(r'.*/([^/]+)/([^/]+)/SCANS/([^/]+)/DICOM/([^/]+)', path)
+            if match:
+                experiment_id = match.group(2)
+                scan_id = match.group(3)
+        elif path_type == 'experiment':
+            match = re.match(r'.*/SCANS/([^/]+)/DICOM/([^/]+)', path)
+            if match:
+                scan_id = match.group(1)
+                
+        experiments+=[experiment_id]
+        scans+=[scan_id]
+        
+    return experiments,scans
 
             
 def main():
@@ -753,6 +778,8 @@ def main():
     file_list=args.file_list
     model_file = args.model_file
     nomenclature_file=args.nomenclature_file
+    tags_out=args.tag_out
+    path_type=args.path_type
     
     # Verify that the specified DICOM files exist
     if not os.path.exists(file_list):    
@@ -781,14 +808,18 @@ def main():
     scans=usc.scans_from_files(dicom_files)
     print("number of input scans:",len(scans))
     labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=usc.infer_nn_ext(scans)
-    print("lengths of output arrays:",len(labels1),len(probs1),len(labels2),len(probs2),len(pred_gini_impurity),len(pred_margin_confidence),len(series_descriptions))
-
-    
+    print("lengths of output arrays:",len(labels1),len(probs1),len(labels2),len(probs2),len(pred_gini_impurity),len(pred_margin_confidence),len(series_descriptions))   
     d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
 
     if len(scans) != len(labels1): 
         print("ERROR: number of input files doesn't match the number of labels, output invalid!")
         return 1	
+        
+    #add experiment and scan columns.    
+    d['experiment'],d['scan']=parse_paths(dicom_files,path_type)
+    
+    for tag in tags_out:
+        d[tag]=[ s[tag] if tag in s.keys() else 'NA' for s in scans ]    
     
     with open('classification_output.csv',mode='w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=d.keys())

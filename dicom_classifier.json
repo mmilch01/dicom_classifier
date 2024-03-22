@@ -7,7 +7,7 @@
   "info-url": "",
   "image": "registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier:0.1",
   "type": "docker",
-  "command-line": "run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf -verbose 0 -tag_out 0018,0015 -tag_out 0008,0060 -tag_out 0054,0016",
+  "command-line": "run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf -verbose 0 -tag_out 0018,0015 -tag_out 0008,0060 -tag_out 0054,0016 -tag_out 0018,0031",
   "override-entrypoint": true,
   "mounts": [
     {

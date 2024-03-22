@@ -38,6 +38,7 @@ process_directories() {
   if [[ -d "$input_dir/DICOM" ]]; then
         if (( verbose )); then echo "found single scan dir, type 0"; fi
         input_type=0
+	path_type="scan"
         #local scan_id=$(basename "$scan_dir")
         #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
         #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
@@ -65,6 +66,7 @@ process_directories() {
       if [[ -d "$scan_dir/DICOM" ]]; then
 	if (( verbose )); then echo "found DICOM dir under $scan_dir, type 2"; fi
         input_type=2
+	path_type="experiment"
         local scan_id=$(basename "$scan_dir")
         #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
         #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
@@ -99,6 +101,7 @@ process_directories() {
           if [[ -d "$scan_dir/DICOM" ]]; then
  	        if (( verbose )); then echo "found DICOM dir with $a files under $scan_dir, type 1"; fi
             input_type=1
+	    path_type="project"
             local scan_id=$(basename "$scan_dir")
             #local file_path=$(get_first_dicom_file "$scan_dir/DICOM")
             #local file_path=$(ls $scan_dir/DICOM/*.dcm | tail -1)
@@ -238,8 +241,7 @@ if [ -z "$2" ]; then
 	echo "  -experiment <XNAT experiment>   Required for single-experiment mode [online mode]"
     echo "  -scan       <XNAT scan ID>      Required for single-scan mode [online mode]"
 	echo "  -verbose    <0|1>               Verbose mode to produce more debug output [0]"
-    echo "  -tags_out   \"group1,elem1[;<group2,elem2>;...]\""
-    echo "                                  List of DICOM tags to output in the resulting csv"
+	echo "  -tag_out   <TagName>		DICOM tag name to output in the resulting csv. This option can be repeated."
 	
 	exit -1
 fi
@@ -284,11 +286,12 @@ while [ -n "$1" ]; do
         -output)    shift; out_dir=$1; shift ;;
         -verbose)   shift; verbose=$1; shift ;;
         -file_index) shift; input_file_list=$1; file_list_defined=1; shift ;;
-        -tags_out)  shift; IFS=';' read -r -a tags_out <<< "$1"; shift ;;
         -tag_out)   shift; tags_out+=($1); shift ;;
-        *) echo "argument: $1, shifting" shift ;;
+        *) echo "argument: $1, shifting"; shift ;;
     esac
 done
+
+
 if (( file_list_defined == 0 )); then 
     input_file_list=$out_dir/input_file_list.txt    
 fi
@@ -303,6 +306,10 @@ if [ ! -d "$out_dir" ]; then
         out_dir=`pwd`/output
     fi
 fi
+echo model file: $model_file
+echo nomenclature file: $nom_file
+echo tokenizer file: $tok_file
+
 
 if [ ! -f "$model_file" -o ! -f "$nom_file" -o ! -f "$tok_file" ]; then 
 	handle_error "One of requred files (model, nomenclature, tokenizer) is missing"
@@ -323,6 +330,7 @@ declare -A type1_array
 type2_array=()
 type0_array=()
 input_type=-1
+path_type=unknown
 experiment_list=()
 scan_list=()
 file_list=()
@@ -391,14 +399,21 @@ if (( determine_modalities )); then
     done
 fi
 
+tag_cmd=""
+if [ -n "$tags_out" ]; then
+    for tag in "${tags_out[@]}"; do
+        tag_cmd="$tag_cmd --tag_out ${tag}"
+    done
+fi
+
 echo "Running classifier."
 if [ "$model_type" == "foundational" ]; then 
     # Run model to infer scan types
-    echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file"
-    python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file
+    echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
+    python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
 elif [ "$model_type" == "fully_connected" ]; then 
-    echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file"
-    python3 $PYLIB/universal_scan_classifier.py --file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file
+    echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
+    python3 $PYLIB/universal_scan_classifier.py --file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
 else 
     handle_error "Unknown model type"
 fi
@@ -411,10 +426,12 @@ fi
 #rcsv classification_output.csv classification_output.sh
 #source classification_output.sh
 tags_out="${tags_out[@]}"
-if [ -n "$tags_out" ]; then
-    echo "updating the output csv with requested DICOM tags..."
-    update_csv_with_tags "$out_dir/$tfile" "$tags_out"
-fi
+
+#if [ -n "$tags_out" ]; then
+#    echo "updating the output csv with requested DICOM tags..."
+#    update_csv_with_tags "$out_dir/$tfile" "$tags_out"
+#fi
+
 echo "Done."
 exit 0
 if (( file_list_defined == 1 )); then 
