@@ -55,13 +55,14 @@ class ScanClassificationModel:
                                       'InversionTime','Rows','Columns','ContrastBolusVolume','ContrastBolusTotalDose',\
                                          'ContrastBolusIngredient','ContrastBolusIngredientConcentration']
         self._singleton_numeric_tags_xnat=['frames']
+        self._sequence_tags=['RadiopharmaceuticalInformationSequence']
         
         #array of numbers
         self._array_numeric_tags=['AcquisitionMatrix','PixelSpacing']
         
         #all supported tags
         self._supported_tags=sorted(self._singleton_string_tags+self._composite_string_tags+\
-            self._singleton_numeric_tags+self._array_numeric_tags)
+            self._singleton_numeric_tags+self._array_numeric_tags+self._sequence_tags)
         
         self._supported_tags_xnat=sorted(self._singleton_string_tags_xnat+\
                                          self._composite_string_tags_xnat+ \
@@ -566,13 +567,19 @@ class UniversalScanClassifier:
 
     def scans_from_files(self,file_list,tags=None):
         if tags is None: tags=self._scm._supported_tags
+        #print('tags:',tags)
         scans=[]
         for file in file_list:
             d=dict()
-            ds=pydicom.filereader.dcmread(file,stop_before_pixels=True,specific_tags=tags)            
+            ds=pydicom.filereader.dcmread(file,stop_before_pixels=True,specific_tags=tags)
+            #ds=pydicom.filereader.dcmread(file,stop_before_pixels=True)
+            #print(ds)
             for tag in tags:
                 try:
-                    d[tag]=ds[tag].value
+                    if tag=='Radiopharmaceutical':
+                        d[tag]=ds['RadiopharmaceuticalInformationSequence'][0]['Radiopharmaceutical'].value
+                    else:
+                        d[tag]=ds[tag].value
                 except Exception as e:
                     pass
             scans+=[d]
@@ -779,6 +786,7 @@ def main():
     model_file = args.model_file
     nomenclature_file=args.nomenclature_file
     tags_out=args.tag_out
+    if tags_out is None: tags_out=[]
     path_type=args.path_type
     
     # Verify that the specified DICOM files exist
