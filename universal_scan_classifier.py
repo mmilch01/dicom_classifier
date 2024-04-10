@@ -672,6 +672,17 @@ class UniversalScanClassifierTest:
         self.usc.init_and_run_nn_training(self.scans,test_split=test_split,\
                                           epochs=epochs,batch_size=batch_size,random_state=random_state)        
         self.usc.save_model_nn('./test/neuro-onc-test3.zip')
+
+    def test_train_model4_nn(self,test_split=0.11,epochs=10,batch_size=10,random_state=1000):
+        #self.test_load_nomenclature3()
+        #self.test_load_training_set3()
+        self.scm.load_from_file('./test/neuro_onc-dcm.json')
+        self.scans=self.usc.read_scans_csv('./test/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.csv')
+        print ('loaded scans from','./test/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.csv')
+        self.usc.init_and_run_nn_training(self.scans,test_split=test_split,\
+                                          epochs=epochs,batch_size=batch_size,random_state=random_state)        
+        self.usc.save_model_nn('./test/neuro-onc-test4.zip')
+
     
     def prediction_accuracy(self,labeled_scans,classified_types):
         scans=labeled_scans
@@ -734,6 +745,22 @@ class UniversalScanClassifierTest:
       
         classified_types=self.usc.infer_nn(scans)
         self.prediction_accuracy(scans,labels1)
+
+    def test_validate_model4_ext_nn(self):
+        self.scm.load_from_file('./test/neuro_onc-dcm.json')
+        self.usc.load_model_nn('./test/neuro-onc-test4.zip')
+        scans=self.usc.read_scans_csv('./test/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.csv')
+        uris=[ s['files'] for s in scans ]
+        labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=self.usc.infer_nn_ext(scans)    
+        d={'files':uris,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}    
+        with open('./test/all_scans_voxelres_classification_output.csv',mode='w',newline='') as f:
+            w=csv.DictWriter(f,fieldnames=d.keys())
+            w.writeheader()
+            for row in zip(*d.values()): w.writerow(dict(zip(d.keys(),row)))
+      
+        classified_types=self.usc.infer_nn(scans)
+        self.prediction_accuracy(scans,labels1)
+
 
     
     def test_infer_model2_svm(self):
@@ -817,7 +844,7 @@ def main():
     print("number of input scans:",len(scans))
     labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=usc.infer_nn_ext(scans)
     print("lengths of output arrays:",len(labels1),len(probs1),len(labels2),len(probs2),len(pred_gini_impurity),len(pred_margin_confidence),len(series_descriptions))   
-    d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
+    d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'SeriesDescription':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
 
     if len(scans) != len(labels1): 
         print("ERROR: number of input files doesn't match the number of labels, output invalid!")

@@ -310,21 +310,25 @@ class DICOMAutoencoderModel:
     def prepare_desc(self,scan):
         s=scan
         text=[]              
-        for key, vals in s.items():
-            if key in self._string_tags:
-                try:
-                    text+=["{}_{}".format(key,val) for val in vals.split(" ") if len(val)>0 ]
-                except Exception as e:
-                    print('WARNING: value error for key {}, value {}'.format(key,vals))
-                    #raise ValueError("key: {}, value: {}".format(key,vals))
-                    
-            elif key in self._string_array_tags:
-                try:
-                    text+=[ "{}{}_{}".format(key,i,vals[i]) for i in range(len(vals)) if len(vals[i])>0 ]
-                except Exception as e:
-                    print('WARNING: value error for key: {}, value: {}'.format(key,vals))
-                    #raise ValueError("key: {}, value: {}".format(key,vals))
-                         
+        try:
+            for key, vals in s.items():
+                if key in self._string_tags:
+                    try:
+                        text+=["{}_{}".format(key,val) for val in vals.split(" ") if len(val)>0 ]
+                    except Exception as e:
+                        print('WARNING: value error for key {}, value {}'.format(key,vals))
+                        #raise ValueError("key: {}, value: {}".format(key,vals))
+                        
+                elif key in self._string_array_tags:
+                    try:
+                        text+=[ "{}{}_{}".format(key,i,vals[i]) for i in range(len(vals)) if len(vals[i])>0 ]
+                    except Exception as e:
+                        print('WARNING: value error for key: {}, value: {}'.format(key,vals))
+                        #raise ValueError("key: {}, value: {}".format(key,vals))
+        except Exception as e:
+            print(e)
+            print(s)
+            return []
         return ' '.join([w for w in text ]) #if ((not w.isdigit()) and (len(w)>1))
 
     def serialize_vectorizer(self,file_root,is_load):
@@ -446,8 +450,6 @@ class DICOMAutoencoderModel:
         x=layers.Dense(dim0/4,activation="relu")(x)
         x=layers.Dense(dim0/8,activation="relu",name='encoder_output')(x)
         return x
-
-
     
     def get_decoder(self,encoded, max_tokens=10000,dim0=256):
         #x=layers.Dropout(.5)(x)    
@@ -456,8 +458,6 @@ class DICOMAutoencoderModel:
         x=layers.Dense(dim0,activation="relu")(x)
         outputs=layers.Dense(max_tokens, activation='sigmoid', name='decoder_output')(x)
         return outputs
-
-
     
     def get_model(self,max_tokens=10000,base_layer_size=256):
         dim0=base_layer_size

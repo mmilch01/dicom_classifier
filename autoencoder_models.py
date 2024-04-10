@@ -217,9 +217,10 @@ class AttentionModel:
         X1_train, X1_test, Y1_train, Y1_test = train_test_split(X1, categorical_labels, test_size=0.2, random_state=42)
         return X1_train,X1_test,Y1_train,Y1_test
 
-    def create_classifier_model(self):
+    def create_classifier_model(self,scan_types):
         embedding_layer = self.autoencoder.layers[1]
         embedding_layer.trainable = False
+        self.max_length=embedding_layer.input_shape[1]
 
         input_layer = Input(shape=(self.max_length,))
         embedding_output = embedding_layer(input_layer)
@@ -229,17 +230,18 @@ class AttentionModel:
         flattened_output=Flatten()(encoder_output)
         dense1=Dense(100,activation='relu')(flattened_output)
         x=Dropout(0.5)(dense1)
-        output_layer = Dense(categorical_labels.shape[1], activation='softmax')(x)
+        output_layer = Dense(len(scan_types), activation='softmax')(x)
+        #output_layer = Dense(categorical_labels.shape[1], activation='softmax')(x)
 
         self.classification_model = Model(inputs=input_layer, outputs=output_layer)
         self.classification_model.summary()        
         self.classification_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
         return self.classification_model
 
-    def train_classifier_model(self,X1_train,Y1_train):
+    def train_classifier_model(self,X1_train,Y1_train,epochs=100,batch_size=512,validation_split=0.2):
         self.classification_model.optimizer.learning_rate.assign(0.001)
         reducer = ReduceLROnPlateau(monitor='loss',factor=0.5, patience=10)
-        self.classification_model.fit(X1_train, Y1_train, epochs=100, batch_size=512, validation_split=0.2,callbacks=[reducer])
+        self.classification_model.fit(X1_train, Y1_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split,callbacks=[reducer])
 
     def evaluate_classifier_model(self,X1_test,Y1_test):
         loss, accuracy = self.classification_model.evaluate(X1_test, Y1_test)
@@ -255,17 +257,16 @@ class AttentionModel:
             print(e)
         return self.tokenizer,model
             
-    def save_model(self, tokenizer, model, root):
+    def save_model(self, model, root):
         try: 
             tokenizer_file,h5file=root+'.tokenizer',root+'.h5'    
             #save individual files for vectorizer and model
             print('saving tokenizer to',tokenizer_file)
-            self.daem.write_pkl(tokenizer,tokenizer_file)        
+            self.daem.write_pkl(self.tokenizer,tokenizer_file)        
             print('saving model to',h5file)
-            model.save(h5file)
-            
+            model.save(h5file)            
         except Exception as e:
-            print('error saving:',zipfile)
+            print('error saving:',h5file)
             print(e)
     
     def print_misclassified_cases(self,X1_test):
@@ -351,6 +352,12 @@ class AttentionModel:
                 
         print('Predicted labels (first 10):',pred_class1[:max_len])
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
+        
+class AttentionModelTest: 
+    def __init__(self,daem:DICOMAutoencoderModel=None):
+        if daem is None: daem=DICOMAutoencoderModel()
+        self.daem=daem
+
 
 def parse_paths(paths, path_type):
     '''
@@ -419,9 +426,9 @@ def main():
             
     am=AttentionModel()
     print('reading scans from DICOM')
-    scans=am.daem.scans_from_files(dcm_file_list)
+    scans=am.daem.scans_from_files(dicom_files)
     print('running classification of {} scans.'.format(len(scans)))
-    labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(dicom_files, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
+    labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(scans, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5)
         
     d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'series_descriptions':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
 

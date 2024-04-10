@@ -218,17 +218,18 @@ update_csv_with_tags()
 if [ -z "$2" ]; then 
 
 	echo "usage: run_classifier_xnat <input dir> <configuration_file> [options]"
+	echo ""
 	echo "Runs in offline mode unless XNAT credentials and required XNAT fields are specified."
 	echo "In online mode, sets the 'scan type' XNAT field to the inferred type."
 	echo "The input configuration file must point to correct model, nomenclature and tokenizer files."
-	
+	echo ""
 	echo "Can run on the following directory structures (directory structure conforms to container service mounts):"
     echo "scan directory: <input_dir>/DiCOM/{DICOM files}"
 	echo "single experiment directory: <input_dir>/SCANS/{scan ID}/DICOM/{DICOM files}"
 	echo "multi-experiment directory: <input_dir>/{experiment ID}/SCANS/{scan ID}/DICOM/{DICOM files}"
-
+	echo ""
 	echo "required Python modules (autoencoder_models.py and dependencies) must be accessible under $PYLIB directory"
-	
+	echo "" 
 	echo "options:"
 	echo "  -output     <directory>         output directory [/output]"
     echo "  -file_index <file>              file listing input DICOM files. Auto-generation is skipped if specified."
