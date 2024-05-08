@@ -761,6 +761,14 @@ class UniversalScanClassifierTest:
         classified_types=self.usc.infer_nn(scans)
         self.prediction_accuracy(scans,labels1)
 
+    def test_evaluate_model4_multi_dataset(self):
+        self.scm.load_from_file('./test/neuro_onc-dcm.json')
+        self.usc.load_model_nn('./test/neuro-onc-test4.zip')
+        label_files=['./test/compare/tcga_classification_output_model_fc_comparison.xlsx',
+               './test/compare/M19021_glioma2_classification_output_model_fc_mirrir_compare.xlsx',
+               './test/compare/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.xlsx']
+        dataset_labels=['TCGA-Glioma', 'M19021_glioma2','CONDR_and_CONDR_METS']
+
 
     
     def test_infer_model2_svm(self):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-import csv, getpass, io, json, os, pickle, pydicom, re, shlex, subprocess, sys, tempfile, tensorflow as tf, unittest, warnings, zipfile, argparse, numpy as np, math,sklearn
+import csv, getpass, io, json, os, pickle, pydicom, re, shlex, subprocess, sys, tempfile, tensorflow as tf, unittest, warnings, zipfile, argparse, numpy as np, math,sklearn, pandas as pd
 
 # Subpackages and function imports
 #from IPython.display import FileLink
@@ -217,9 +217,9 @@ class AttentionModel:
         X1_train, X1_test, Y1_train, Y1_test = train_test_split(X1, categorical_labels, test_size=0.2, random_state=42)
         return X1_train,X1_test,Y1_train,Y1_test
 
-    def create_classifier_model(self,scan_types):
+    def create_classifier_model(self,scan_types,trainable_embedding=False):
         embedding_layer = self.autoencoder.layers[1]
-        embedding_layer.trainable = False
+        embedding_layer.trainable = trainable_embedding
         self.max_length=embedding_layer.input_shape[1]
 
         input_layer = Input(shape=(self.max_length,))
@@ -286,7 +286,7 @@ class AttentionModel:
                 n+=1        
         print('misclassifications: {} out of {}'.format(n,m))
 
-    def classify_dicom_scans(self, scans, tokenizer_file, model_file, nomenclature_file,confidence_level=0.95,unknown_label='UNKNOWN'):        
+    def classify_dicom_scans(self, scans, tokenizer_file, model_file, nomenclature_file,confidence_level=0.95,unknown_label='UNKNOWN',verbose=0):        
         self.tokenizer,self.classification_model=self.load_model(tokenizer_file,model_file)
         max_length=self.classification_model.layers[0].input_shape[0][1]
         sd=self.sequences=self.sequences_from_scans(scans,max_length)
@@ -297,7 +297,7 @@ class AttentionModel:
         pred=self.classification_model.predict(self.sequences)
 
         max_len=min(10,len(pred))
-        print('pred (first 10):',pred[:max_len])
+        if verbose>1: print('pred (first 10):',pred[:max_len])
 
         #pred_ord=np.argmax(pred,1)
         pred_ord=np.argsort(-pred,axis=1)
@@ -307,9 +307,9 @@ class AttentionModel:
         label_encoder = LabelEncoder()
         label_encoder.fit_transform(self.load_nomenclature(nomenclature_file))                                    
         pred_inv0=label_encoder.inverse_transform(pred_ord[:,0])
-        print('pred_inv0 (first 10):',pred_inv0[:max_len])
+        if verbose>1: print('pred_inv0 (first 10):',pred_inv0[:max_len])
         pred_inv1=label_encoder.inverse_transform(pred_ord[:,1])
-        print('pred_inv1 (first 10):',pred_inv1[:max_len])
+        if verbose>0: print('pred_inv1 (first 10):',pred_inv1[:max_len])
         #out_label=[]
         series_descriptions=[]
         #prediction quality metrics
@@ -348,16 +348,82 @@ class AttentionModel:
                 series_descriptions+=[scans[i]['SeriesDescription'].replace(' ','_')+' ']
             except Exception as e:
                 series_descriptions+=['NA']
-                print('no series description for file',i)
-                
-        print('Predicted labels (first 10):',pred_class1[:max_len])
+                if verbose>0: print('no series description for file',i)
+        if verbose>0: print('Predicted labels (first 10):',pred_class1[:max_len])
         return pred_class1,pred_prob1,pred_class2,pred_prob2,pred_gini_impurity,pred_margin_confidence,series_descriptions
         
 class AttentionModelTest: 
-    def __init__(self,daem:DICOMAutoencoderModel=None):
-        if daem is None: daem=DICOMAutoencoderModel()
-        self.daem=daem
+    def __init__(self):
+        daem=DICOMAutoencoderModel()
+        self.am=AttentionModel()
 
+    def train_model1(self):
+        am,daem=self.am,self.am.daem
+        #input
+        tokenizer_file='./model_mirrir_1351062s_15Kt.10.04.2023/tokenizer.pkl'        
+        label_file='./test/compare/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.csv'
+        ae_model_file='autoencoder.dualhead.21ep.h5'
+        ae_model_dir='./model_mirrir_1351062s_15Kt.10.04.2023/'
+        nomenclature_file='./model_mirrir_1351062s_15Kt.10.04.2023/neuro_onc.json'
+        
+        #output
+        classifier_model_root='./test/classifier.neuro-onc_mirrir1351062_04112024'        
+        df=pd.read_csv(label_file)
+        dicom_files=df['files']
+        print('Reading scans')
+        scans=am.daem.scans_from_files(dicom_files)
+        am.load_autoencoder(ae_model_dir,model_file=ae_model_file)
+        scan_types=am.load_nomenclature(nomenclature_file)
+        am.create_classifier_model(scan_types,trainable_embedding=False)
+        am.tokenizer=am.daem.read_pkl(tokenizer_file)
+        print('Creating sequences')
+        seqs=am.sequences_from_scans(scans,am.max_length)
+        X1 = pad_sequences(seqs, maxlen=77, padding='post')
+        labels=df['hof_id']
+        
+        le=LabelEncoder()
+        le.fit_transform(scan_types)
+        encoded_labels=le.fit_transform(labels)        
+        categorical_labels = to_categorical(encoded_labels)
+        
+        X1_train, X1_test, Y1_train, Y1_test = train_test_split(X1, categorical_labels, test_size=0.1, random_state=42)
+        am.train_classifier_model(X1_train,Y1_train,epochs=100,batch_size=512,validation_split=0.1)
+        am.evaluate_classifier_model(X1,categorical_labels)
+        am.save_model(am.classification_model,classifier_model_root)
+        print('Done')
+
+    def evaluate_model1(self):
+        am,daem=self.am,self.am.daem
+        label_files=['./test/compare/tcga_classification_output_model_fc_comparison.xlsx',
+               './test/compare/M19021_glioma2_classification_output_model_fc_mirrir_compare.xlsx',
+               './test/compare/manual_label_based_on_classification_output_model_fc_39374-600.03.20.2024_2024Apr06_113650.xlsx']
+
+        dataset_labels=['TCGA-Glioma', 'M19021_glioma2','CONDR_and_CONDR_METS']
+        tokenizer_file='./model_mirrir_1351062s_15Kt.10.04.2023/tokenizer.pkl'
+        model_file='./test/classifier.neuro-onc_mirrir1351062_04112024.h5'
+        #model_file='./model_mirrir_1351062_36530.04.07.2024/classifier.neuro-onc_mirrir1351062_04072024.h5'
+        nomenclature_file='./model_mirrir_1351062s_15Kt.10.04.2023/neuro_onc.json'
+        
+        for file,dataset in zip(label_files,dataset_labels):
+            print(f'Evaluating {model_file} on {dataset}')
+            df=pd.read_excel(file)
+            dicom_files=df['files']
+            sdescs=df['SeriesDescription']
+            print('Reading DICOM files')
+            scans=am.daem.scans_from_files(dicom_files)
+            manual_labels=df['labels_manual']
+            print('running classification of {} scans.'.format(len(scans)))
+            labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=am.classify_dicom_scans(scans, tokenizer_file, model_file, nomenclature_file,confidence_level=0.5,verbose=1)
+            nMatch,nMismatch=0,0
+            for sd,manual_label,computed_label in zip (sdescs,manual_labels,labels1):
+                if manual_label == computed_label: 
+                    nMatch+=1
+                else: 
+                    nMismatch+=1
+                    if nMismatch<10:
+                        print(f'description: {sd}, manual label: {manual_label}, computed label: {computed_label}')
+            print(f'Total labels: {nMatch+nMismatch}, correct: {nMatch}, incorrect: {nMismatch}, accuracy: {nMatch/(nMatch+nMismatch)}')
+            break
 
 def parse_paths(paths, path_type):
     '''
