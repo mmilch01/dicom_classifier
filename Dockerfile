@@ -25,8 +25,11 @@ RUN pip install certifi --ignore-installed
 
 #install python packages
 
-RUN pip install tensorflow-cpu==2.13
-RUN pip install pydicom scikit-learn ipywidgets matplotlib
+RUN pip install tensorflow-cpu==2.13 pydicom==2.4.3 scikit-learn==1.3.0 \
+    ipywidgets==8.1.0 matplotlib==3.7.2 jupyterhub==3.0.0 pandas==2.0.3 \
+    Pillow==10.0.0 ipydatagrid==1.2.1 voila==0.5.5 
+    
+#RUN jupyter lab build --minimize=False
 
 #RUN yum -y install zip unzip ImageMagick html2ps xvfb bc wget epel-release bzip2 which git cmake gcc gcc-c++ libstdc++-static epel-release csh compat-libgfortran-41 libjpeg-turbo-utils
 #RUN yum -y install CharLS libXfont gnuplot xorg-x11-server-Xvfb 
@@ -36,6 +39,7 @@ RUN mkdir -p /models/model_mirrir_1351062s_15Kt.10.04.2023
 RUN mkdir -p /models/model_fc_39374-600.03.20.2024
 RUN mkdir -p /output
 RUN mkdir -p /input
+RUN mkdir -p /resources
 
 COPY src /src
 COPY model_mirrir_1351062s_15Kt.10.04.2023 /models/model_mirrir_1351062s_15Kt.10.04.2023
