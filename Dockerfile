@@ -19,7 +19,7 @@ RUN cd /tmp && \
 	wget http://li.nux.ro/download/nux/dextop/el7/x86_64/dcmtk-3.6.0-16.el7.nux.x86_64.rpm && \
 	rpm -Uvh dcmtk-3.6.0-16.el7.nux.x86_64.rpm
 
-RUN pip install --upgrade pip
+RUN pip install --upgrade pip --default-timeout=30
 #workariunds to avoid runtime errors.
 RUN pip install certifi --ignore-installed
 
