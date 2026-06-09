@@ -1,0 +1,143 @@
+#!/bin/bash
+
+# Entry point for heuristic (ParseDicomClassifier) post-processing stage.
+# Reads a classifier output CSV from a mounted XNAT project resource,
+# runs ParseDicomClassifier.py to produce a per-experiment scan-selection CSV,
+# and uploads the result back to the same project resource.
+
+handle_error() {
+    echo "run_heuristic_classifier ERROR: $1"
+    exit 1
+}
+
+handle_warning() {
+    echo "run_heuristic_classifier WARNING: $1"
+}
+
+if [ -z "$2" ]; then
+    echo "usage: run_heuristic_classifier <input_dir> <resource_name> [options]"
+    echo ""
+    echo "  <input_dir>     Directory where the project resource is mounted (e.g. /input)"
+    echo "  <resource_name> XNAT project resource name (source of input CSV; output is uploaded here)"
+    echo ""
+    echo "options:"
+    echo "  -input_csv  <file>          Input CSV filename (required; path relative to <input_dir> or absolute)"
+    echo "  -output     <directory>     Output directory for intermediate files [/output]"
+    echo "  -server     <XNAT server>   Required for upload"
+    echo "  -project    <XNAT project>  Required for upload"
+    echo "  -jsession   <JSESSION>      Either this or user/password required for upload"
+    echo "  -user       <XNAT user>     This or JSESSION required for upload"
+    echo "  -pass       <XNAT password> This or JSESSION required for upload"
+    echo "  -verbose    <0|1>           Verbose output [0]"
+    exit -1
+fi
+
+# Attempt to guess PYLIB from script location
+if [ -z "$PYLIB" ]; then
+    PYLIB="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+fi
+
+if [ ! -f "$PYLIB/ParseDicomClassifier.py" ]; then
+    handle_error "PYLIB does not contain ParseDicomClassifier.py (PYLIB=$PYLIB)"
+fi
+
+input_dir=$1; shift
+resource_name=$1; shift
+
+out_dir=/output
+verbose=0
+input_csv=""
+
+xnat_server=""
+project_id=""
+jsession_token=""
+xnat_user=""
+xnat_pass=""
+
+while [ -n "$1" ]; do
+    case $1 in
+        -server)    shift; xnat_server=$1;    shift ;;
+        -project)   shift; project_id=$1;     shift ;;
+        -jsession)  shift; jsession_token=$1; shift ;;
+        -user)      shift; xnat_user=$1;      shift ;;
+        -pass)      shift; xnat_pass=$1;      shift ;;
+        -input_csv) shift; input_csv=$1;      shift ;;
+        -output)    shift; out_dir=$1;        shift ;;
+        -verbose)   shift; verbose=$1;        shift ;;
+        *) echo "unknown argument: $1, skipping"; shift ;;
+    esac
+done
+
+# Require input CSV
+if [ -z "$input_csv" ]; then
+    handle_error "-input_csv is required"
+fi
+
+# Resolve path relative to input_dir if not absolute
+if [[ "$input_csv" != /* ]]; then
+    input_csv="$input_dir/$input_csv"
+fi
+
+if [ ! -f "$input_csv" ]; then
+    handle_error "Input CSV not found: $input_csv"
+fi
+
+# Ensure output directory exists
+if [ ! -d "$out_dir" ]; then
+    mkdir -p "$out_dir" || handle_error "Cannot create output directory: $out_dir"
+fi
+
+# Build timestamped output filename
+output_filename="heuristic_classification_$(date +%Y%b%d_%H%M%S).csv"
+output_csv="$out_dir/$output_filename"
+
+echo "input CSV:  $input_csv"
+echo "output CSV: $output_csv"
+
+# Run heuristic classifier
+echo "Running ParseDicomClassifier..."
+python3 "$PYLIB/ParseDicomClassifier.py" -i "$input_csv" -o "$output_csv"
+if [ $? -ne 0 ]; then
+    handle_error "ParseDicomClassifier.py failed"
+fi
+
+if [ ! -f "$output_csv" ]; then
+    handle_error "Expected output file not found: $output_csv"
+fi
+
+echo "Heuristic classification complete. Output: $output_csv"
+
+# Upload to XNAT project resource
+if [ -z "$xnat_server" ] || [ -z "$project_id" ]; then
+    echo "XNAT server or project not specified — skipping upload."
+    echo "Done."
+    exit 0
+fi
+
+# Obtain session token if not provided
+if [ -z "$jsession_token" ]; then
+    if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
+        handle_error "XNAT credentials required: provide -jsession or both -user and -pass"
+    fi
+    jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
+    if [ $? -ne 0 ] || [ -z "$jsession_token" ]; then
+        handle_error "Cannot obtain JSESSION from $xnat_server"
+    fi
+    echo "Obtained JSESSION token."
+fi
+
+upload_url="$xnat_server/data/projects/$project_id/resources/$resource_name/files/$output_filename?overwrite=true"
+if (( verbose )); then
+    echo "Uploading to: $upload_url"
+fi
+
+curl -X PUT "$upload_url" \
+    -H "Cookie: JSESSIONID=$jsession_token" \
+    --upload-file "$output_csv" \
+    --fail --silent --show-error
+if [ $? -ne 0 ]; then
+    handle_error "Failed to upload $output_filename to resource $resource_name (project $project_id)"
+fi
+
+echo "Uploaded $output_filename to XNAT project resource '$resource_name'."
+echo "Done."

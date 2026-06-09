@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""
+Set XNAT scan type fields from a classifier CSV.
+
+Type I  (run_classifier_xnat output):  one row per scan.
+  Required columns: experiment, scan, <label_col>
+  Each row sets one scan's type to the value in <label_col>.
+
+Type II (run_heuristic_classifier output): one row per experiment.
+  Required columns: experiment, T1nc, T1ce, T2, FLAIR (scan numbers)
+  Each of those columns yields: scan_number -> type = column name.
+"""
+
+from __future__ import annotations
+
+import argparse
+import math
+import sys
+from typing import Optional
+
+import pandas as pd
+import requests
+
+TYPE2_COLS = {"T1nc", "T1ce", "T2", "FLAIR"}
+TYPE2_LABELS = ["T1nc", "T1ce", "T2", "FLAIR"]
+TYPE1_LABEL_CANDIDATES = ["labels1", "label_manual", "label", "type", "scan_type"]
+
+
+def detect_csv_type(df: pd.DataFrame) -> int:
+    if TYPE2_COLS.issubset(df.columns):
+        return 2
+    if {"experiment", "scan"}.issubset(df.columns):
+        return 1
+    raise SystemExit(
+        f"Cannot determine CSV type.\n"
+        f"Type I requires columns: experiment, scan, <label>.\n"
+        f"Type II requires columns: experiment, T1nc, T1ce, T2, FLAIR.\n"
+        f"Found: {list(df.columns)}"
+    )
+
+
+def find_label_col(df: pd.DataFrame, hint: str) -> str:
+    if hint and hint in df.columns:
+        return hint
+    for name in TYPE1_LABEL_CANDIDATES:
+        if name in df.columns:
+            return name
+    raise SystemExit(
+        f"Cannot find a label column. Tried: {TYPE1_LABEL_CANDIDATES}.\n"
+        f"Available columns: {list(df.columns)}\n"
+        f"Use --label-col to specify."
+    )
+
+
+def _is_valid_scan(v) -> bool:
+    try:
+        return not (v is None or (isinstance(v, float) and math.isnan(v)))
+    except Exception:
+        return False
+
+
+class XnatClient:
+    def __init__(self, server: str, jsession: str):
+        self.server = server.rstrip("/")
+        self.session = requests.Session()
+        self.session.cookies.set("JSESSIONID", jsession)
+
+    def set_scan_type(self, experiment_id: str, scan_id: str, label: str) -> None:
+        url = f"{self.server}/data/experiments/{experiment_id}/scans/{scan_id}"
+        r = self.session.put(url, params={"type": label})
+        r.raise_for_status()
+
+
+def apply_type1(
+    df: pd.DataFrame,
+    label_col: str,
+    client: XnatClient,
+    verbose: bool,
+) -> tuple[int, int]:
+    n_done = n_fail = 0
+    total = len(df)
+    for _, row in df.iterrows():
+        experiment_id = str(row["experiment"])
+        scan_id = str(row["scan"])
+        label = str(row[label_col])
+        try:
+            client.set_scan_type(experiment_id, scan_id, label)
+            n_done += 1
+            if verbose:
+                print(f"  {experiment_id}/{scan_id} -> {label}")
+            elif n_done % 100 == 0:
+                print(f"  Updated {n_done}/{total} scans...")
+        except Exception as e:
+            print(f"WARNING: {experiment_id}/{scan_id}: {e}")
+            n_fail += 1
+    return n_done, n_fail
+
+
+def apply_type2(
+    df: pd.DataFrame,
+    client: XnatClient,
+    verbose: bool,
+) -> tuple[int, int]:
+    n_done = n_fail = 0
+    total = sum(
+        1
+        for _, row in df.iterrows()
+        for col in TYPE2_LABELS
+        if col in row.index and _is_valid_scan(row[col])
+    )
+    for _, row in df.iterrows():
+        experiment_id = str(row["experiment"])
+        for col_label in TYPE2_LABELS:
+            if col_label not in row.index:
+                continue
+            raw = row[col_label]
+            if not _is_valid_scan(raw):
+                continue
+            try:
+                scan_id = str(int(float(raw)))
+            except (ValueError, TypeError):
+                continue
+            try:
+                client.set_scan_type(experiment_id, scan_id, col_label)
+                n_done += 1
+                if verbose:
+                    print(f"  {experiment_id}/{scan_id} -> {col_label}")
+                elif n_done % 100 == 0:
+                    print(f"  Updated {n_done}/{total} scans...")
+            except Exception as e:
+                print(f"WARNING: {experiment_id}/{scan_id}: {e}")
+                n_fail += 1
+    return n_done, n_fail
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description="Set XNAT scan types from a classifier CSV (type I or II)."
+    )
+    ap.add_argument("-i", "--input", required=True, help="Input CSV file")
+    ap.add_argument("--server", required=True, help="XNAT server URL")
+    ap.add_argument("--jsession", required=True, help="XNAT JSESSION token")
+    ap.add_argument("--label-col", default="", help="Label column for type I CSV [auto-detect]")
+    ap.add_argument("--verbose", action="store_true")
+    args = ap.parse_args()
+
+    df = pd.read_csv(args.input)
+    csv_type = detect_csv_type(df)
+    print(f"Detected CSV type {csv_type} ({len(df)} rows).")
+
+    client = XnatClient(server=args.server, jsession=args.jsession)
+
+    if csv_type == 1:
+        label_col = find_label_col(df, args.label_col)
+        print(f"Using label column: '{label_col}'")
+        n_done, n_fail = apply_type1(df, label_col, client, args.verbose)
+    else:
+        n_done, n_fail = apply_type2(df, client, args.verbose)
+
+    print(f"Done. Updated {n_done} scans, {n_fail} failures.")
+    if n_fail > 0:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# Entry point for setting XNAT scan types from a project-level resource CSV.
+# Downloads the named CSV from the specified project resource, then calls
+# set_scan_types.py which auto-detects type I (one row/scan) or
+# type II (one row/experiment, T1nc/T1ce/T2/FLAIR columns).
+
+handle_error() {
+    echo "set_scan_types_xnat ERROR: $1"
+    exit 1
+}
+
+if [ -z "$2" ]; then
+    echo "usage: set_scan_types_xnat <resource_name> <csv_name> [options]"
+    echo ""
+    echo "  <resource_name>  XNAT project resource containing the CSV"
+    echo "  <csv_name>       Filename of the CSV within the resource"
+    echo ""
+    echo "options:"
+    echo "  -server     <XNAT server>   Required"
+    echo "  -project    <XNAT project>  Required"
+    echo "  -jsession   <JSESSION>      Either this or user/password required"
+    echo "  -user       <XNAT user>     This or JSESSION required"
+    echo "  -pass       <XNAT password> This or JSESSION required"
+    echo "  -label_col  <column name>   Label column for type I CSV [auto-detect]"
+    echo "  -output     <directory>     Working directory [/output]"
+    echo "  -verbose    <0|1>           Verbose output [0]"
+    exit -1
+fi
+
+if [ -z "$PYLIB" ]; then
+    PYLIB="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+fi
+
+if [ ! -f "$PYLIB/set_scan_types.py" ]; then
+    handle_error "PYLIB does not contain set_scan_types.py (PYLIB=$PYLIB)"
+fi
+
+resource_name=$1; shift
+csv_name=$1; shift
+
+out_dir=/output
+verbose=0
+label_col=""
+xnat_server=""
+project_id=""
+jsession_token=""
+xnat_user=""
+xnat_pass=""
+
+while [ -n "$1" ]; do
+    case $1 in
+        -server)    shift; xnat_server=$1;    shift ;;
+        -project)   shift; project_id=$1;     shift ;;
+        -jsession)  shift; jsession_token=$1; shift ;;
+        -user)      shift; xnat_user=$1;      shift ;;
+        -pass)      shift; xnat_pass=$1;      shift ;;
+        -label_col) shift; label_col=$1;      shift ;;
+        -output)    shift; out_dir=$1;        shift ;;
+        -verbose)   shift; verbose=$1;        shift ;;
+        *) echo "unknown argument: $1, skipping"; shift ;;
+    esac
+done
+
+if [ -z "$xnat_server" ] || [ -z "$project_id" ]; then
+    handle_error "-server and -project are required"
+fi
+
+# Obtain session token if not provided
+if [ -z "$jsession_token" ]; then
+    if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
+        handle_error "Provide -jsession or both -user and -pass"
+    fi
+    jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
+    if [ $? -ne 0 ] || [ -z "$jsession_token" ]; then
+        handle_error "Cannot obtain JSESSION from $xnat_server"
+    fi
+    echo "Obtained JSESSION token."
+fi
+
+# Ensure working directory exists
+if [ ! -d "$out_dir" ]; then
+    mkdir -p "$out_dir" || handle_error "Cannot create output directory: $out_dir"
+fi
+
+# Download CSV from project resource
+local_csv="$out_dir/$csv_name"
+download_url="$xnat_server/data/projects/$project_id/resources/$resource_name/files/$csv_name"
+if (( verbose )); then
+    echo "Downloading: $download_url"
+fi
+
+curl -s -X GET "$download_url" \
+    -H "Cookie: JSESSIONID=$jsession_token" \
+    --fail --show-error \
+    -o "$local_csv"
+if [ $? -ne 0 ] || [ ! -f "$local_csv" ]; then
+    handle_error "Failed to download $csv_name from resource $resource_name"
+fi
+echo "Downloaded $csv_name to $local_csv"
+
+# Build python call
+py_args="--input $local_csv --server $xnat_server --jsession $jsession_token"
+if [ -n "$label_col" ]; then
+    py_args="$py_args --label-col $label_col"
+fi
+if (( verbose )); then
+    py_args="$py_args --verbose"
+fi
+
+echo "Setting scan types..."
+python3 "$PYLIB/set_scan_types.py" $py_args
+if [ $? -ne 0 ]; then
+    handle_error "set_scan_types.py failed"
+fi
+
+echo "Done."
