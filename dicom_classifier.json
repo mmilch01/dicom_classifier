@@ -1,13 +1,13 @@
 {
-  "name": "DICOM_LM_classifier",
-  "label": "DICOM_LM_CLASSIFIER v0.1",
-  "description": "Runs DICOM LM classifier",
+  "name": "DICOM classifier v0.2",
+  "label": "DICOM classifier v0.2",
+  "description": "Run DICOM classifier v0.2",
   "version": "0.1",
   "schema-version": "1.0",
   "info-url": "",
-  "image": "registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier:0.1",
+  "image": "mmilch01/dicom_classifier:0.2",
   "type": "docker",
-  "command-line": "run_classifier_xnat /input /models/model_mirrir_1351062s_15Kt.10.04.2023/neuro-onc.conf -verbose 0 -tag_out 0018,0015 -tag_out 0008,0060 -tag_out 0054,0016 -tag_out 0018,0031",
+  "command-line": "run_classifier_xnat /input /models/model_fc_39374-600.03.20.2024/neuro-onc_fc.conf -verbose 0 -tag_out ImageOrientationPatient -tag_out SliceThickness -tag_out PixelSpacing -tag_out ImageType -tag_out ImageDimensions",
   "override-entrypoint": true,
   "mounts": [
     {
@@ -119,11 +119,40 @@
           "tags": []
         }
       ]
+    },
+    {
+      "name": "DICOM LM classifier (subject)",
+      "label": "DICOM LM classifier (subject)",
+      "description": "Run DICOM LM classifier on subject data",
+      "contexts": [
+        "xnat:subjectData"
+      ],
+      "external-inputs": [
+        {
+          "name": "subject",
+          "description": "Input subject",
+          "type": "Subject",
+          "required": true,
+          "load-children": false
+        }
+      ],
+      "derived-inputs": [],
+      "output-handlers": [
+        {
+          "name": "output-resource",
+          "accepts-command-output": "output",
+          "as-a-child-of": "subject",
+          "type": "Resource",
+          "label": "DEBUG_OUTPUT",
+          "tags": []
+        }
+      ]
     }
   ],
   "reserve-memory": 12284,
   "container-labels": {},
   "generic-resources": {},
   "ulimits": {},
-  "secrets": []
+  "secrets": [],
+  "visibility": "public"
 }

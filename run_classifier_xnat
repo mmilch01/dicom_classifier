@@ -408,20 +408,34 @@ if [ -n "$tags_out" ]; then
 fi
 
 echo "Running classifier."
+classification_csv=classification_output.csv
+rm -f "$classification_csv"
+
 if [ "$model_type" == "foundational" ]; then 
     # Run model to infer scan types
     echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
     python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
+    if [ $? -ne 0 ]; then
+        handle_error "Foundational classifier failed"
+    fi
 elif [ "$model_type" == "fully_connected" ]; then 
     echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
     python3 $PYLIB/universal_scan_classifier.py --file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
+    if [ $? -ne 0 ]; then
+        handle_error "Fully connected classifier failed"
+    fi
 else 
     handle_error "Unknown model type"
 fi
 
+if [ ! -s "$classification_csv" ]; then
+    handle_error "Classifier did not produce a non-empty $classification_csv"
+fi
+
 tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
-if [ -d "$out_dir" ]; then 
-	mv classification_output.csv $out_dir/$tfile
+mv "$classification_csv" "$out_dir/$tfile"
+if [ $? -ne 0 ]; then
+    handle_error "Failed to move classifier output to $out_dir/$tfile"
 fi
 
 #rcsv classification_output.csv classification_output.sh
