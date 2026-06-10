@@ -1,21 +1,6 @@
 #!/bin/bash
 
-# Function to handle errors
-handle_error() {
-    echo "run_classifier_xnat ERROR: $1"
-    exit 1
-}
-
-handle_warning() {
-    echo "run_classifier_xnat WARNING: $1"
-}
-
-# Function to find the first DICOM file in a given directory
-get_first_dicom_file() {
-  local dicom_dir=$1
-  # This will return the first file found in the given directory
-  find "$dicom_dir" -type f -name "*.dcm" | head -n 1
-}
+PROGRAM_NAME="run_classifier_xnat"
 
 #input: path
 function get_middle_dcm_file () {
@@ -133,93 +118,11 @@ process_directories() {
   echo "Found $n DICOM files"
 }
 
-resolve_subject() {
-    experiment_label=$1
-    subject_label=$(curl -s -b JSESSIONID=$jsession $xnat_server/data/projects/$project_id/experiments/$experiment_label?format=json -X GET -H "Content-Type: application/json" | jq -r '.items[0].data_fields.subject_ID')
-    if (( $? )); then handle_error "cannot resolve subject label for $experiment_label"; fi
-    echo $subject_label
-}
-
-extract_ids() {
-    local type="$1"
-    local path="$2"
-    
-    # Remove the /input prefix from the path for easier manipulation
-    local trimmed_path="${path#/input}" temp
-    
-    case "$type" in
-        0)
-            # Use global variables directly
-            SCAN_ID="$scan_id"
-            EXPERIMENT_ID="$experiment_id"
-            ;;
-        2)
-            # Extract SCAN_ID from the path
-            # Assumes path format: /input/SCANS/<SCAN_ID>/DICOM/<arbitrary string>
-            SCAN_ID="${trimmed_path#*/SCANS/}"
-            SCAN_ID="${SCAN_ID%%/*}"
-            EXPERIMENT_ID="$experiment_id"
-            ;;
-        1)
-            # Extract both SCAN_ID and EXPERIMENT_ID from the path
-            # Assumes path format: /input/<EXPERIMENT_ID>/SCANS/<SCAN_ID>/DICOM/<arbitrary string>
-            temp="${trimmed_path%%/SCANS/*}"
-            EXPERIMENT_ID="${temp##*/}"
-            temp="${path##*/SCANS/}"
-            SCAN_ID="${temp%%/DICOM/*}"
-            ;;
-        *)
-            echo "Invalid type"
-            return 1
-            ;;
-    esac
-
-    #echo "EXPERIMENT_ID: $EXPERIMENT_ID, SCAN_ID: $SCAN_ID"
-}
-
-update_csv_with_tags()
-{
-	local csv_file="$1" tag_list=($2) temp_file=$(mktemp) tag_list_filtered first_line new_line
-	# Create headers for new columns, replacing commas in tags with underscores
-	for i in "${!tag_list[@]}"; do tag_list_filtered[$i]=${tag_list[$i]//,/"_"}; done
-	local headers=$(IFS=,; echo "${tag_list_filtered[*]}"),experiment,scan    
-	echo tag_list: ${tag_list[@]}
-	echo tag_list_filtered: ${tag_list_filtered[@]}
-	echo headers: $headers
-	
-    # Add new headers to the temp file
-    read -r first_line < $csv_file
-    first_line=$(echo "$first_line" | tr -d '\r\n')	
-	echo $first_line,$headers > "$temp_file"
-	local n fil others tag_values tag_value safe_tag_value
-    n=0
-    # Skip the header line and process the rest of the file    
-    tail -n +2 "$csv_file" | while IFS=, read -r fil others; do
-        new_line="$fil,$others"
-        tag_values=$(dcminfo_dcmtk "$fil" ${tag_list[@]} -f)
-        for tag_value in ${tag_values[@]}; do
-            safe_tag_value=$(echo -n "$tag_value" | tr -d '\r\n' | sed 's/,/_/g')
-            new_line=$(echo "$new_line" | tr -d '\r\n')
-            new_line="${new_line},${safe_tag_value}"
-        done
-        #set experiment and scan ID's either from the path or globally pre-set variables.
-        extract_ids $input_type "$fil"
-        ((n++))
-        echo -ne "Row $n\033[0K\r"
-        # Append the new line to the temp file
-        echo "$new_line,$EXPERIMENT_ID,$SCAN_ID" >> "$temp_file"
-        #if (( n>3 )); then break; fi
-    done
-    # Move the temporary file to the original CSV file    
-    mv "$temp_file" "$csv_file"
-}
-
-
 if [ -z "$2" ]; then 
 
 	echo "usage: run_classifier_xnat <input dir> <configuration_file> [options]"
 	echo ""
-	echo "Runs in offline mode unless XNAT credentials and required XNAT fields are specified."
+	echo "Runs in offline mode."
 	echo "In online mode, sets the 'scan type' XNAT field to the inferred type."
 	echo "The input configuration file must point to correct model, nomenclature and tokenizer files."
 	echo ""
@@ -252,8 +155,14 @@ if [ -z "$PYLIB" ]; then
     PYLIB="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 fi
 
+source "$PYLIB/shlib/common.shlib" ||
+    {
+        echo "$PROGRAM_NAME ERROR: Cannot load $PYLIB/shlib/common.shlib"
+        exit 1
+    }
+
 if [ ! -f "$PYLIB/autoencoder_models.py" ]; then 
-	handle_error "PYLIB environment variable is not defined or does not contain required files (autoencoder_models.py and dependencies)"
+	handle_error "$PROGRAM_NAME" "PYLIB environment variable is not defined or does not contain required files (autoencoder_models.py and dependencies)"
 fi
 
 # Input arguments
@@ -265,11 +174,9 @@ out_dir=/output
 
 verbose=0
 file_list_defined=0
-
-
 tags_out=()
 
-project_id=NA
+
 subject_id=NA
 experiment_id=NA
 scan_id=NA
@@ -299,29 +206,16 @@ fi
 echo tags_out: "${tags_out[@]}"
 
 
-if [ ! -d "$out_dir" ]; then
-    mkdir -p $out_dir
-    if [ ! -d "$out_dir" ]; then
-        echo "WARNING: output directory $out_dir does not exist and could not be created. Output dir is created under: `pwd`/output."
-        mkdir -p `pwd`/output
-        out_dir=`pwd`/output
-    fi
-fi
+ensure_directory "$out_dir" ||
+    handle_error "$PROGRAM_NAME" "Cannot create output directory: $out_dir"
+
 echo model file: $model_file
 echo nomenclature file: $nom_file
 echo tokenizer file: $tok_file
 
 
 if [ ! -f "$model_file" -o ! -f "$nom_file" -o ! -f "$tok_file" ]; then 
-	handle_error "One of requred files (model, nomenclature, tokenizer) is missing"
-fi
-online_mode=0
-
-if [ -n "$xnat_server" -a -n "$xnat_project" ]; then 
-    if [ -z "$jsession_token" ]; then 
-        jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
-        if (( $? )); then handle_error "Cannot connect to $xnat_server"; fi
-    fi
+	handle_error "$PROGRAM_NAME" "One of requred files (model, nomenclature, tokenizer) is missing"
 fi
 
 #set -x
@@ -329,7 +223,6 @@ fi
 declare -A type1_array
 # Indexed array holding scan_id,first_DICOM_file 
 type2_array=()
-type0_array=()
 input_type=-1
 path_type=unknown
 experiment_list=()
@@ -368,19 +261,27 @@ if (( file_list_defined == 0 )); then
         echo "detected files to use: ${file_list[@]}"
     fi
     # Check if arrays are populated
-    [[ ${#file_list[@]} -eq 0 ]] && handle_error "No DICOM files found."
+    [[ ${#file_list[@]} -eq 0 ]] && handle_error "$PROGRAM_NAME" "No DICOM files found."
 
     #write input files to the list file.
     echo "Writing input file list."
-    rm -f $input_file_list
-    zipfile=$out_dir/file_list.zip
+    rm -f $input_file_list    
     for file in "${file_list[@]}"; do
-        #echo zip -r $zipfile $file
-        #zip -r $zipfile $file
         echo $file >> $input_file_list    
     done
+else
+    if [[ -d "$main_input_dir/DICOM" ]]; then
+        path_type="scan"
+    elif [[ -d "$main_input_dir/SCANS" ]]; then
+        path_type="experiment"
+    else
+        path_type="project"
+    fi
 fi
-echo 2
+
+# TODO: Do not remove or modify this code yet. 
+# This is not supposed to run currently, 
+# but may be implemented in the future.
 determine_modalities=0
 if (( determine_modalities )); then 
     echo "Determining modalities."
@@ -391,7 +292,7 @@ if (( determine_modalities )); then
 
         modality=$(echo $line | tr '[:upper:]' '[:lower:]')
         if [ -z "$modality" ]; then 
-            handle_warning "Failed to determine modality for $dicom_file."
+            handle_warning "$PROGRAM_NAME" "Failed to determine modality for $dicom_file."
             valid_list+=(0)
         else
             valid_list+=(1)
@@ -416,71 +317,26 @@ if [ "$model_type" == "foundational" ]; then
     echo python3 $PYLIB/autoencoder_models.py "--file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
     python3 $PYLIB/autoencoder_models.py --file_list $input_file_list --model_file $model_file --tokenizer_file $tok_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
     if [ $? -ne 0 ]; then
-        handle_error "Foundational classifier failed"
+        handle_error "$PROGRAM_NAME" "Foundational classifier failed"
     fi
 elif [ "$model_type" == "fully_connected" ]; then 
     echo python3 $PYLIB/universal_scan_classifier.py "--file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd"
     python3 $PYLIB/universal_scan_classifier.py --file_list $input_file_list --model_file $model_file --nomenclature_file $nom_file --path_type $path_type $tag_cmd
     if [ $? -ne 0 ]; then
-        handle_error "Fully connected classifier failed"
+        handle_error "$PROGRAM_NAME" "Fully connected classifier failed"
     fi
 else 
-    handle_error "Unknown model type"
+    handle_error "$PROGRAM_NAME" "Unknown model type"
 fi
 
 if [ ! -s "$classification_csv" ]; then
-    handle_error "Classifier did not produce a non-empty $classification_csv"
+    handle_error "$PROGRAM_NAME" "Classifier did not produce a non-empty $classification_csv"
 fi
 
 tfile=classification_output_${model_label}_`date +%Y%h%d_%H%M%S`.csv
 mv "$classification_csv" "$out_dir/$tfile"
 if [ $? -ne 0 ]; then
-    handle_error "Failed to move classifier output to $out_dir/$tfile"
-fi
-
-#rcsv classification_output.csv classification_output.sh
-#source classification_output.sh
-tags_out="${tags_out[@]}"
-
-#if [ -n "$tags_out" ]; then
-#    echo "updating the output csv with requested DICOM tags..."
-#    update_csv_with_tags "$out_dir/$tfile" "$tags_out"
-#fi
-
-echo "Done."
-exit 0
-if (( file_list_defined == 1 )); then 
-    echo "XNAT processing will not run since local file list was specified."
-    exit 0
-fi
-
-
-[[ ${#labels[@]} -ne ${#file_list[@]} ]] && handle_error "Failed to infer scan types"
-
-#for type1 processing, resolve subject for each experiment
-if (( input_type==1 )); then 
-    subjects=()
-    for experiment in ${!type1_array[*]}; do
-        subjects+=(resolve_subject $experiment)
-    done
-    #upload the resource
-    
-    
-    # Set scan type in XNAT using REST API
-    for i in "${!scan_list[@]}"; do
-        curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
-            -H "Cookie: JSESSIONID=$jsession_token" \
-            --fail --silent --show-error || handle_error "Failed to update scan type for projects/$project_id/subjects/${subjects[i]}/experiments/${experiment_list[i]}/scans/${scan_list[i]}"
-    done    
-else 
-    # upload the resource
-    
-    # Set scan type in XNAT using REST API
-    for i in "${!scan_list[@]}"; do
-        curl -X PUT "$xnat_server/data/projects/$project_id/subjects/${subject_id}/experiments/${experiment_id}/scans/${scan_list[i]}?xsiType=xnat:${modalities[$i]}ScanData&type=${labels[$i]}" \
-            -H "Cookie: JSESSIONID=$jsession_token" \
-            --fail --silent --show-error || handle_error "Failed to update scan type for projects/$project_id/subjects/${subject_id}/experiments/${experiment_id}/scans/${scan_list[i]}"
-    done
+    handle_error "$PROGRAM_NAME" "Failed to move classifier output to $out_dir/$tfile"
 fi
 
 echo "Script completed successfully"

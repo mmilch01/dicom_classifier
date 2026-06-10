@@ -5,14 +5,7 @@
 # runs ParseDicomClassifier.py to produce a per-experiment scan-selection CSV,
 # and uploads the result back to the same project resource.
 
-handle_error() {
-    echo "run_heuristic_classifier ERROR: $1"
-    exit 1
-}
-
-handle_warning() {
-    echo "run_heuristic_classifier WARNING: $1"
-}
+PROGRAM_NAME="run_heuristic_classifier"
 
 if [ -z "$2" ]; then
     echo "usage: run_heuristic_classifier <input_dir> <resource_name> [options]"
@@ -37,8 +30,11 @@ if [ -z "$PYLIB" ]; then
     PYLIB="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 fi
 
+source "$PYLIB/shlib/common.shlib"
+source "$PYLIB/shlib/xnat.shlib"
+
 if [ ! -f "$PYLIB/ParseDicomClassifier.py" ]; then
-    handle_error "PYLIB does not contain ParseDicomClassifier.py (PYLIB=$PYLIB)"
+    handle_error "$PROGRAM_NAME" "PYLIB does not contain ParseDicomClassifier.py (PYLIB=$PYLIB)"
 fi
 
 input_dir=$1; shift
@@ -70,7 +66,7 @@ done
 
 # Require input CSV
 if [ -z "$input_csv" ]; then
-    handle_error "-input_csv is required"
+    handle_error "$PROGRAM_NAME" "-input_csv is required"
 fi
 
 # Resolve path relative to input_dir if not absolute
@@ -79,13 +75,12 @@ if [[ "$input_csv" != /* ]]; then
 fi
 
 if [ ! -f "$input_csv" ]; then
-    handle_error "Input CSV not found: $input_csv"
+    handle_error "$PROGRAM_NAME" "Input CSV not found: $input_csv"
 fi
 
 # Ensure output directory exists
-if [ ! -d "$out_dir" ]; then
-    mkdir -p "$out_dir" || handle_error "Cannot create output directory: $out_dir"
-fi
+ensure_directory "$out_dir" ||
+    handle_error "$PROGRAM_NAME" "Cannot create output directory: $out_dir"
 
 # Build timestamped output filename
 output_filename="heuristic_classification_$(date +%Y%b%d_%H%M%S).csv"
@@ -98,11 +93,11 @@ echo "output CSV: $output_csv"
 echo "Running ParseDicomClassifier..."
 python3 "$PYLIB/ParseDicomClassifier.py" -i "$input_csv" -o "$output_csv"
 if [ $? -ne 0 ]; then
-    handle_error "ParseDicomClassifier.py failed"
+    handle_error "$PROGRAM_NAME" "ParseDicomClassifier.py failed"
 fi
 
 if [ ! -f "$output_csv" ]; then
-    handle_error "Expected output file not found: $output_csv"
+    handle_error "$PROGRAM_NAME" "Expected output file not found: $output_csv"
 fi
 
 echo "Heuristic classification complete. Output: $output_csv"
@@ -117,12 +112,10 @@ fi
 # Obtain session token if not provided
 if [ -z "$jsession_token" ]; then
     if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
-        handle_error "XNAT credentials required: provide -jsession or both -user and -pass"
+        handle_error "$PROGRAM_NAME" "XNAT credentials required: provide -jsession or both -user and -pass"
     fi
-    jsession_token=$(curl -s -X POST "$xnat_server/data/JSESSION" -u "$xnat_user:$xnat_pass")
-    if [ $? -ne 0 ] || [ -z "$jsession_token" ]; then
-        handle_error "Cannot obtain JSESSION from $xnat_server"
-    fi
+    jsession_token=$(xnat_get_jsession "$xnat_server" "$xnat_user" "$xnat_pass") ||
+        handle_error "$PROGRAM_NAME" "Cannot obtain JSESSION from $xnat_server"
     echo "Obtained JSESSION token."
 fi
 
@@ -131,13 +124,14 @@ if (( verbose )); then
     echo "Uploading to: $upload_url"
 fi
 
-curl -X PUT "$upload_url" \
-    -H "Cookie: JSESSIONID=$jsession_token" \
-    --upload-file "$output_csv" \
-    --fail --silent --show-error
-if [ $? -ne 0 ]; then
-    handle_error "Failed to upload $output_filename to resource $resource_name (project $project_id)"
-fi
+xnat_upload_project_resource_file \
+    "$xnat_server" \
+    "$project_id" \
+    "$resource_name" \
+    "$output_csv" \
+    "$output_filename" \
+    "$jsession_token" ||
+    handle_error "$PROGRAM_NAME" "Failed to upload $output_filename to resource $resource_name (project $project_id)"
 
 echo "Uploaded $output_filename to XNAT project resource '$resource_name'."
 echo "Done."
