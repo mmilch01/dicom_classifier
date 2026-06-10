@@ -1,0 +1,51 @@
+#!/bin/bash
+
+xnat_get_jsession() {
+    local server=$1
+    local user=$2
+    local password=$3
+    local jsession
+
+    jsession=$(curl --fail --silent --show-error \
+        -X POST "$server/data/JSESSION" \
+        -u "$user:$password") || return 1
+
+    [ -n "$jsession" ] || return 1
+    printf '%s\n' "$jsession"
+}
+
+xnat_download_project_resource_file() {
+    local server=$1
+    local project_id=$2
+    local resource_name=$3
+    local remote_filename=$4
+    local destination=$5
+    local jsession=$6
+    local url
+
+    url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename"
+
+    curl --fail --silent --show-error \
+        -X GET "$url" \
+        -H "Cookie: JSESSIONID=$jsession" \
+        -o "$destination" || return 1
+
+    [ -f "$destination" ]
+}
+
+xnat_upload_project_resource_file() {
+    local server=$1
+    local project_id=$2
+    local resource_name=$3
+    local local_file=$4
+    local remote_filename=$5
+    local jsession=$6
+    local url
+
+    url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename?overwrite=true"
+
+    curl --fail --silent --show-error \
+        -X PUT "$url" \
+        -H "Cookie: JSESSIONID=$jsession" \
+        --upload-file "$local_file"
+}

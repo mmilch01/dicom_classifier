@@ -1,0 +1,40 @@
+#!/bin/bash
+
+if [ -z "$2" ]; then 
+	echo "usage: dcminfo_dcmtk <dcm_path> <group,elem> [<group,elem> ...] [options]"
+	echo "options: "
+	echo "	-f	input path is single file [default is DICOM directory]"
+	exit -1
+fi
+
+in_dir=$1; shift
+
+file_path=0
+tag_cmd=""
+tags=""
+
+while [ -n "$1" ]; do
+        case "$1" in
+                -f) file_path=1; shift ;;
+                *) tag_cmd="$tag_cmd +P $1"; tags="$tags $1"; shift ;;
+        esac
+done
+
+if (( file_path )); then 
+	in_fil=$in_dir
+else
+	in_fil=$in_dir/`ls $in_dir | tail -1`
+fi
+
+lines=$(dcmdump $tag_cmd $in_fil)
+for tag in $tags; do
+        value=$(echo "$lines" | grep -oP "\($tag\)\s+\S+\s+\[\K[^\]]+" || echo "empty")
+	value=${value// /_}
+        echo -n "$value " 
+done
+
+#line=`dcmdump $tag_string $in_fil`
+#line="${line#*[}"
+#line="${line%]*}"
+#echo -n $line
+
