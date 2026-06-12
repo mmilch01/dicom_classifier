@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Set XNAT scan type fields from a classifier CSV.
 
@@ -11,15 +10,13 @@ Type II (run_heuristic_classifier output): one row per experiment.
   Each of those columns yields: scan_number -> type = column name.
 """
 
-from __future__ import annotations
-
 import argparse
 import math
 import sys
 from typing import Optional
 
 import pandas as pd
-import requests
+from pyxnat import Interface
 
 TYPE2_COLS = {"T1nc", "T1ce", "T2", "FLAIR"}
 TYPE2_LABELS = ["T1nc", "T1ce", "T2", "FLAIR"]
@@ -60,23 +57,22 @@ def _is_valid_scan(v) -> bool:
 
 
 class XnatClient:
-    def __init__(self, server: str, jsession: str):
-        self.server = server.rstrip("/")
-        self.session = requests.Session()
-        self.session.cookies.set("JSESSIONID", jsession)
+    def __init__(self, server: str, user: str, password: str):
+        # pyxnat Interface expects server like "https://xnat.example.org"
+        self.session = Interface(server=server, user=user, password=password)
 
-    def set_scan_type(self, experiment_id: str, scan_id: str, label: str) -> None:
-        url = f"{self.server}/data/experiments/{experiment_id}/scans/{scan_id}"
-        r = self.session.put(url, params={"type": label})
-        r.raise_for_status()
+    def set_scan_type(self, project_id: str, experiment_id: str, scan_id: str, label: str) -> None:
+        scan = self.session.select.project(project_id).experiment(experiment_id).scan(scan_id)
+        scan.attrs.set("type", label)
 
 
 def apply_type1(
     df: pd.DataFrame,
     label_col: str,
     client: XnatClient,
+    project_id: str,
     verbose: bool,
-) -> tuple[int, int]:
+):
     n_done = n_fail = 0
     total = len(df)
     for _, row in df.iterrows():
@@ -84,7 +80,7 @@ def apply_type1(
         scan_id = str(row["scan"])
         label = str(row[label_col])
         try:
-            client.set_scan_type(experiment_id, scan_id, label)
+            client.set_scan_type(project_id, experiment_id, scan_id, label)
             n_done += 1
             if verbose:
                 print(f"  {experiment_id}/{scan_id} -> {label}")
@@ -93,14 +89,16 @@ def apply_type1(
         except Exception as e:
             print(f"WARNING: {experiment_id}/{scan_id}: {e}")
             n_fail += 1
+
     return n_done, n_fail
 
 
 def apply_type2(
     df: pd.DataFrame,
     client: XnatClient,
+    project_id: str,
     verbose: bool,
-) -> tuple[int, int]:
+):
     n_done = n_fail = 0
     total = sum(
         1
@@ -121,7 +119,7 @@ def apply_type2(
             except (ValueError, TypeError):
                 continue
             try:
-                client.set_scan_type(experiment_id, scan_id, col_label)
+                client.set_scan_type(project_id, experiment_id, scan_id, col_label)
                 n_done += 1
                 if verbose:
                     print(f"  {experiment_id}/{scan_id} -> {col_label}")
@@ -137,9 +135,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Set XNAT scan types from a classifier CSV (type I or II)."
     )
+    
     ap.add_argument("-i", "--input", required=True, help="Input CSV file")
     ap.add_argument("--server", required=True, help="XNAT server URL")
-    ap.add_argument("--jsession", required=True, help="XNAT JSESSION token")
+    ap.add_argument("--user", required=True, help="XNAT username")
+    ap.add_argument("--password", required=True, help="XNAT password")
+    ap.add_argument("--project", required=True, help="XNAT project ID")
     ap.add_argument("--label-col", default="", help="Label column for type I CSV [auto-detect]")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
@@ -148,14 +149,14 @@ def main() -> None:
     csv_type = detect_csv_type(df)
     print(f"Detected CSV type {csv_type} ({len(df)} rows).")
 
-    client = XnatClient(server=args.server, jsession=args.jsession)
+    client = XnatClient(server=args.server, user=args.user, password=args.password)
 
     if csv_type == 1:
         label_col = find_label_col(df, args.label_col)
         print(f"Using label column: '{label_col}'")
-        n_done, n_fail = apply_type1(df, label_col, client, args.verbose)
+        n_done, n_fail = apply_type1(df, label_col, client, args.project, args.verbose)
     else:
-        n_done, n_fail = apply_type2(df, client, args.verbose)
+        n_done, n_fail = apply_type2(df, client, args.project, args.verbose)
 
     print(f"Done. Updated {n_done} scans, {n_fail} failures.")
     if n_fail > 0:
