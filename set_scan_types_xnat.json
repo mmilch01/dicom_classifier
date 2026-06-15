@@ -1,0 +1,96 @@
+{
+  "name": "set-scan-types-xnat",
+  "label": "Set scan types from spreadsheet",
+  "description": "Set scan types for an XNAT project from a CSV file in a project resource",
+  "version": "0.1",
+  "schema-version": "1.0",
+  "info-url": "",
+  "image": "mmilch01/dicom_classifier:latest",
+  "type": "docker",
+  "command-line": "set_scan_types_xnat \"#RESOURCE_NAME#\" \"#CSV_NAME#\" -server \"$XNAT_HOST\" -user \"$XNAT_USER\" -pass \"$XNAT_PASS\" -project \"#PROJECT_ID#\"",
+  "override-entrypoint": true,
+  "mounts": [],
+  "environment-variables": {},
+  "ports": {},
+  "inputs": [
+    {
+      "name": "RESOURCE_NAME",
+      "label": "Resource name",
+      "description": "Name of the XNAT project resource containing the spreadsheet",
+      "type": "string",
+      "required": true,
+      "replacement-key": "#RESOURCE_NAME#"
+    },
+    {
+      "name": "CSV_NAME",
+      "label": "Spreadsheet filename",
+      "description": "Filename of the CSV spreadsheet within the project resource",
+      "type": "string",
+      "required": true,
+      "replacement-key": "#CSV_NAME#"
+    },
+    {
+      "name": "PROJECT_ID",
+      "label": "Project ID",
+      "description": "XNAT project ID",
+      "type": "string",
+      "required": true,
+      "replacement-key": "#PROJECT_ID#"
+    }
+  ],
+  "outputs": [],
+  "xnat": [
+    {
+      "name": "set-scan-types-from-spreadsheet",
+      "label": "Set scan types from spreadsheet",
+      "description": "Set scan types for this project from a CSV file in a project resource",
+      "contexts": [
+        "xnat:projectData"
+      ],
+      "external-inputs": [
+        {
+          "name": "project",
+          "description": "Project whose scan types will be updated",
+          "type": "Project",
+          "required": true,
+          "load-children": false
+        },
+        {
+          "name": "resource-name",
+          "label": "Resource name",
+          "description": "Name of the project resource containing the spreadsheet",
+          "type": "string",
+          "required": true,
+          "provides-value-for-command-input": "RESOURCE_NAME"
+        },
+        {
+          "name": "csv-name",
+          "label": "Spreadsheet filename",
+          "description": "Filename of the CSV spreadsheet within the project resource",
+          "type": "string",
+          "required": true,
+          "provides-value-for-command-input": "CSV_NAME"
+        }
+      ],
+      "derived-inputs": [
+        {
+          "name": "project-id",
+          "description": "XNAT project ID",
+          "type": "string",
+          "required": true,
+          "provides-value-for-command-input": "PROJECT_ID",
+          "derived-from-wrapper-input": "project",
+          "derived-from-xnat-object-property": "id",
+          "multiple": false
+        }
+      ],
+      "output-handlers": []
+    }
+  ],
+  "reserve-memory": 2048,
+  "container-labels": {},
+  "generic-resources": {},
+  "ulimits": {},
+  "secrets": [],
+  "visibility": "public"
+}
