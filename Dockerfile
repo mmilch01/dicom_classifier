@@ -21,16 +21,17 @@ RUN mkdir -p /opt/micromamba \
 
 RUN micromamba install -y -n base -c conda-forge \
     python=3.8.16 \
-    tensorflow==2.13 \
-    pydicom==2.4.3 \
-    scikit-learn==1.3.0 \
-    matplotlib==3.7.2 \
-    pandas==2.0.3 \
-    Pillow==10.0.0 \
+    pydicom=2.4.3 \
+    scikit-learn=1.3.0 \
+    matplotlib=3.7.2 \
+    pandas=2.0.3 \
+    pillow=10.0.0 \
     requests \
     pip \
+ && micromamba run -n base pip install --no-cache-dir \
+    tensorflow==2.13.0 \
     pyxnat==1.6.3 \
-    && micromamba clean -a -y
+ && micromamba clean -a -y
 
 COPY --chmod=755 src /src
 COPY --chmod=755 model_mirrir_1351062s_15Kt.10.04.2023 /models/model_mirrir_1351062s_15Kt.10.04.2023

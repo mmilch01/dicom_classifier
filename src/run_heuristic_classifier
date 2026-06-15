@@ -18,9 +18,8 @@ if [ -z "$2" ]; then
     echo "  -output     <directory>     Output directory for intermediate files [/output]"
     echo "  -server     <XNAT server>   Required for upload"
     echo "  -project    <XNAT project>  Required for upload"
-    echo "  -jsession   <JSESSION>      Either this or user/password required for upload"
-    echo "  -user       <XNAT user>     This or JSESSION required for upload"
-    echo "  -pass       <XNAT password> This or JSESSION required for upload"
+    echo "  -user       <XNAT user>     Required for upload"
+    echo "  -pass       <XNAT password> Required for upload"
     echo "  -verbose    <0|1>           Verbose output [0]"
     exit -1
 fi
@@ -54,7 +53,6 @@ while [ -n "$1" ]; do
     case $1 in
         -server)    shift; xnat_server=$1;    shift ;;
         -project)   shift; project_id=$1;     shift ;;
-        -jsession)  shift; jsession_token=$1; shift ;;
         -user)      shift; xnat_user=$1;      shift ;;
         -pass)      shift; xnat_pass=$1;      shift ;;
         -input_csv) shift; input_csv=$1;      shift ;;
@@ -109,15 +107,13 @@ if [ -z "$xnat_server" ] || [ -z "$project_id" ]; then
     exit 0
 fi
 
-# Obtain session token if not provided
-if [ -z "$jsession_token" ]; then
-    if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
-        handle_error "$PROGRAM_NAME" "XNAT credentials required: provide -jsession or both -user and -pass"
-    fi
-    jsession_token=$(xnat_get_jsession "$xnat_server" "$xnat_user" "$xnat_pass") ||
-        handle_error "$PROGRAM_NAME" "Cannot obtain JSESSION from $xnat_server"
-    echo "Obtained JSESSION token."
+# Obtain session token
+if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
+    handle_error "$PROGRAM_NAME" "XNAT credentials required: provide both -user and -pass"
 fi
+jsession_token=$(xnat_get_jsession "$xnat_server" "$xnat_user" "$xnat_pass") ||
+    handle_error "$PROGRAM_NAME" "Cannot obtain JSESSION from $xnat_server"
+echo "Obtained JSESSION token."
 
 upload_url="$xnat_server/data/projects/$project_id/resources/$resource_name/files/$output_filename?overwrite=true"
 if (( verbose )); then
