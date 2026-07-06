@@ -5,7 +5,7 @@
   "version": "0.1",
   "schema-version": "1.0",
   "info-url": "",
-  "image": "mmilch01/dicom_classifier:latest",
+  "image": "mmilch01/dicom_classifier:0.2",
   "type": "docker",
   "command-line": "run_classifier_xnat /input /models/model_fc_39374-600.03.20.2024/neuro-onc_fc.conf -verbose 0 -tag_out ImageOrientationPatient -tag_out SliceThickness -tag_out PixelSpacing -tag_out ImageType -tag_out ImageDimensions",
   "override-entrypoint": true,

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import getpass, ipywidgets as ipw, os, json, shlex, io, re, tempfile, subprocess,unittest, argparse
+import getpass, os, json, shlex, io, re, tempfile, subprocess,unittest, argparse
 import pydicom,numpy as np,csv,warnings,pickle,sys
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
@@ -348,7 +348,7 @@ class UniversalScanClassifier:
     def init_and_run_training(self,scans,test_split=0.11,epochs=10,batch_size=10,random_state=1000):
         if self._scm._classifier_type=="perceptron_nn":
             return self.init_and_run_nn_training(scans,test_split=test_split,\
-                                                 epochs=eporchs,batch_size=batch_size,\
+                                                 epochs=epochs,batch_size=batch_size,\
                                                  random_state=random_state)
         elif self._scm._classifier_type=="linear_svm":
             return self.init_and_run_svm_training(scans,test_split=test_split,random_state=random_state)
@@ -842,10 +842,10 @@ def main():
     scm=ScanClassificationModel()
     usc=UniversalScanClassifier(scm)
     if not scm.load_from_file(nomenclature_file): 
-        printf(f"Error: cannot read nomenclature file {file}", file=nomenclature_file)
+        print(f"Error: cannot read nomenclature file {file}", file=nomenclature_file)
         sys.exit(1)
     if not usc.load_model_nn(model_file):
-        printf(f"Error: cannot read model file {file}",file=model_file)
+        print(f"Error: cannot read model file {file}",file=model_file)
         sys.exit(1)
         
     scans=usc.scans_from_files(dicom_files)
