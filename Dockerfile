@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV MAMBA_ROOT_PREFIX=/opt/micromamba \
     PATH=/src:/usr/local/bin:/opt/micromamba/bin:/usr/bin:/bin \
-    PYLIB=/src
+    PYLIB=/src \
+    HOME=/tmp    
 
 RUN mkdir -p /opt/micromamba \
     && curl -L https://anaconda.org/conda-forge/micromamba/2.4.0/download/linux-64/micromamba-2.4.0-0.tar.bz2 \
@@ -17,7 +18,8 @@ RUN mkdir -p /opt/micromamba \
     && mkdir -p /models/model_fc_39374-600.03.20.2024 \
     && mkdir -p /output \
     && mkdir -p /input \
-    && mkdir -p /resources
+    && mkdir -p /resources \
+    && chmod 777 /input /models /resources /output
 
 RUN micromamba install -y -n base -c conda-forge \
     python=3.8.16 \
@@ -27,16 +29,18 @@ RUN micromamba install -y -n base -c conda-forge \
     pandas=2.0.3 \
     pillow=10.0.0 \
     requests \
-    pip \
+    pip     \
  && micromamba run -n base pip install --no-cache-dir \
     tensorflow==2.13.0 \
     pyxnat==1.6.3 \
+    ipywidgets==8.1.5 \
  && micromamba clean -a -y
 
 COPY --chmod=755 src /src
 COPY --chmod=755 model_mirrir_1351062s_15Kt.10.04.2023 /models/model_mirrir_1351062s_15Kt.10.04.2023
 COPY --chmod=755 model_fc_39374-600.03.20.2024 /models/model_fc_39374-600.03.20.2024
 COPY --chmod=755 entrypoint.sh /entrypoint.sh
+
 
 WORKDIR /output
 ENTRYPOINT ["/entrypoint.sh"]

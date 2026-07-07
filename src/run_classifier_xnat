@@ -265,10 +265,23 @@ if (( file_list_defined == 0 )); then
 
     #write input files to the list file.
     echo "Writing input file list."
-    rm -f $input_file_list    
+    ensure_directory "$(dirname "$input_file_list")" ||
+        handle_error "$PROGRAM_NAME" "Cannot create input file list directory: $(dirname "$input_file_list")"
+
+    rm -f "$input_file_list" ||
+        handle_error "$PROGRAM_NAME" "Cannot remove old input file list: $input_file_list"
+
+    : > "$input_file_list" ||
+        handle_error "$PROGRAM_NAME" "Cannot write input file list: $input_file_list"
+
     for file in "${file_list[@]}"; do
-        echo $file >> $input_file_list    
+        printf '%s\n' "$file" >> "$input_file_list" ||
+            handle_error "$PROGRAM_NAME" "Cannot append to input file list: $input_file_list"
     done
+
+    if [ ! -s "$input_file_list" ]; then
+        handle_error "$PROGRAM_NAME" "Input file list was not created or is empty: $input_file_list"
+    fi
 else
     if [[ -d "$main_input_dir/DICOM" ]]; then
         path_type="scan"

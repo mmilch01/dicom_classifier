@@ -1,4 +1,4 @@
 #!/bin/bash
 
 echo "building Docker image."
-docker build . -t registry.nrg.wustl.edu/docker/nrg-repo/dicom_classifier
+docker build . -t mmilch01/dicom_classifier

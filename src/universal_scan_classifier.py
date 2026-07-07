@@ -21,6 +21,7 @@ from zipfile import ZipFile
 
 from juxnat_lib import xnat_utils
 
+#test comment
 
 """
 Created on Mon Dec 12 15:45:06 2022
@@ -850,7 +851,8 @@ def main():
         
     scans=usc.scans_from_files(dicom_files)
     print("number of input scans:",len(scans))
-    labels1,probs1,labels2,probs2,pred_gini_impurity,pred_margin_confidence,series_descriptions=usc.infer_nn_ext(scans)
+    labels1,probs1,labels2,probs2,pred_gini_impurity,\
+        pred_margin_confidence,series_descriptions=usc.infer_nn_ext(scans)
     print("lengths of output arrays:",len(labels1),len(probs1),len(labels2),len(probs2),len(pred_gini_impurity),len(pred_margin_confidence),len(series_descriptions))   
     d={'files':dicom_files,'labels1':labels1,'probs1':probs1,'labels2':labels2,'probs2':probs2,'SeriesDescription':series_descriptions, 'pred_gini_impurity':pred_gini_impurity,'pred_margin_confidence':pred_margin_confidence}
 

@@ -5,3 +5,5 @@ if [ -f "/opt/micromamba/etc/profile.d/micromamba.sh" ]; then
     source /opt/micromamba/etc/profile.d/micromamba.sh
     micromamba activate base
 fi
+
+exec "$@"
