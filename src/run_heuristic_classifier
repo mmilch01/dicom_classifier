@@ -16,6 +16,7 @@ if [ -z "$2" ]; then
     echo "options:"
     echo "  -input_csv  <file>          Input CSV filename (required; path relative to <input_dir> or absolute)"
     echo "  -output     <directory>     Output directory for intermediate files [/output]"
+    echo "  -t2w-min-slice-thickness <mm>  Maximum allowed T2w slice thickness [2.5]"
     echo "  -server     <XNAT server>   Required for upload"
     echo "  -project    <XNAT project>  Required for upload"
     echo "  -user       <XNAT user>     Required for upload"
@@ -42,6 +43,7 @@ resource_name=$1; shift
 out_dir=/output
 verbose=0
 input_csv=""
+t2w_min_slice_thickness=""
 
 xnat_server=""
 project_id=""
@@ -58,6 +60,7 @@ while [ -n "$1" ]; do
         -input_csv) shift; input_csv=$1;      shift ;;
         -output)    shift; out_dir=$1;        shift ;;
         -verbose)   shift; verbose=$1;        shift ;;
+        -t2w-min-slice-thickness) shift; t2w_min_slice_thickness=$1; shift ;;
         *) echo "unknown argument: $1, skipping"; shift ;;
     esac
 done
@@ -89,7 +92,11 @@ echo "output CSV: $output_csv"
 
 # Run heuristic classifier
 echo "Running ParseDicomClassifier..."
-python3 "$PYLIB/ParseDicomClassifier.py" -i "$input_csv" -o "$output_csv"
+parse_args=()
+if [ -n "$t2w_min_slice_thickness" ]; then
+    parse_args+=(--t2w-min-slice-thickness "$t2w_min_slice_thickness")
+fi
+python3 "$PYLIB/ParseDicomClassifier.py" -i "$input_csv" -o "$output_csv" "${parse_args[@]}"
 if [ $? -ne 0 ]; then
     handle_error "$PROGRAM_NAME" "ParseDicomClassifier.py failed"
 fi

@@ -185,12 +185,12 @@ def is_post(series: str) -> bool:
     return sd.endswith("_POST") or ("_POST_" in sd)
 
 
-def passes_t1t2_qc(ps: Optional[Tuple[float, float]], st: Optional[float]) -> bool:
+def passes_t1t2_qc(ps: Optional[Tuple[float, float]], st: Optional[float], max_slice_thickness: float = 2.5) -> bool:
     if ps is None or st is None:
         return False
     if ps[0] > 1.5 or ps[1] > 1.5:
         return False
-    if st > 2.5:
+    if st > max_slice_thickness:
         return False
     return True
 
@@ -269,6 +269,7 @@ def main() -> None:
     ap.add_argument("--slicethickness-col", default="SliceThickness")
     ap.add_argument("--label1-col", default="labels1")
     ap.add_argument("--likelihood-col", default="", help="Optional: override likelihood column name")
+    ap.add_argument("--t2w-min-slice-thickness", type=float, default=2.5, help="Maximum allowed T2w slice thickness in mm [2.5]")
     args = ap.parse_args()
 
     df = read_table(args.input)
@@ -358,18 +359,14 @@ def main() -> None:
                 flr.append(c)
                 continue
 
-            # T1/T2: enforce QC limits
-            if not passes_t1t2_qc(ps, st):
-                continue
-
             st1 = score_t1(l1, sd)
-            if st1 > 0:
+            if st1 > 0 and passes_t1t2_qc(ps, st):
                 c = dict(s)
                 c["computed_score"] = st1
                 t1w.append(c)
 
             st2 = score_t2(l1, sd)
-            if st2 > 0:
+            if st2 > 0 and passes_t1t2_qc(ps, st, max_slice_thickness=args.t2w_min_slice_thickness):
                 c = dict(s)
                 c["computed_score"] = st2
                 t2w.append(c)
