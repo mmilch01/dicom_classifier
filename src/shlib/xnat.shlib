@@ -1,47 +1,30 @@
 #!/bin/bash
 
 xnat_get_jsession() {
-    local server=$1
-    local user=$2
-    local password=$3
-    local jsession
+    local server="$1" user="$2" password="$3" jsession curl_status
 
-    jsession=$(curl -s -k -u "$user:$password" \
-        "$server/data/JSESSION") || return 1
-
-    [ -n "$jsession" ] || return 1
-    [[ "$jsession" != *Error* ]] || return 1
-    printf '%s\n' "$jsession"
+    jsession=$(curl -s -k -u --fail "$user:$password" "$server/data/JSESSION")
+    curl_status=$?
+    echo -n "$jsession"
+    return "$curl_status"
 }
 
 xnat_download_project_resource_file() {
-    local server=$1
-    local project_id=$2
-    local resource_name=$3
-    local remote_filename=$4
-    local destination=$5
-    local jsession=$6
-    local url
-
+    local server="$1" project_id="$2" resource_name="$3" 
+    local remote_filename="$4" destination="$5" jsession="$6" url cmd
     url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename"
-    curl -k --cookie "JSESSIONID=$jsession" -o "$destination" "$url" 
-    
-    [ -f "$destination" ]
+
+    cmd=(curl --fail -k --cookie "JSESSIONID=$jsession" --output "$destination" "$url")
+    echo ${cmd[@]}
+    "${cmd[@]}"
 }
 
 xnat_upload_project_resource_file() {
-    local server=$1
-    local project_id=$2
-    local resource_name=$3
-    local local_file=$4
-    local remote_filename=$5
-    local jsession=$6
-    local url
-
+    local server=$1 project_id=$2 resource_name=$3 local_file=$4
+    local remote_filename=$5 jsession=$6 url cmd
     url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename?overwrite=true"
 
-    curl -k --cookie "JSESSIONID=$jsession" \
-        -X PUT \
-        -F "file=@$local_file" \
-        "$url"
+    cmd=(curl --fail --show-error -k --cookie "JSESSIONID=$jsession" --request PUT --form "file=@$local_file" "$url")
+    echo ${cmd[@]}
+    "${cmd[@]}"
 }
