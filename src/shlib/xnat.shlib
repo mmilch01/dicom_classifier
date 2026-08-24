@@ -6,15 +6,11 @@ xnat_get_jsession() {
     local password=$3
     local jsession
 
-    jsession=$(curl --fail --silent --show-error \
-        -X POST "$server/data/JSESSION" \
-        -u "$user:$password") || return 1
+    jsession=$(curl -s -k -u "$user:$password" \
+        "$server/data/JSESSION") || return 1
 
-    # Command substitution removes newlines but preserves a trailing CR.
-    # A CR in the cookie value causes XNAT to reject an otherwise valid session.
-    jsession=${jsession//$'\r'/}
-
-    [[ "$jsession" =~ ^[[:alnum:]_.-]+$ ]] || return 1
+    [ -n "$jsession" ] || return 1
+    [[ "$jsession" != *Error* ]] || return 1
     printf '%s\n' "$jsession"
 }
 
@@ -27,15 +23,9 @@ xnat_download_project_resource_file() {
     local jsession=$6
     local url
 
-    jsession=${jsession#JSESSIONID=}
-    jsession=${jsession//$'\r'/}
     url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename"
-    curl --fail --silent --show-error \
-        --request GET \
-        --cookie "JSESSIONID=$jsession" \
-        --output "$destination" \
-        "$url" || return 1
-
+    curl -k --cookie "JSESSIONID=$jsession" -o "$destination" "$url" 
+    
     [ -f "$destination" ]
 }
 
@@ -50,9 +40,8 @@ xnat_upload_project_resource_file() {
 
     url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename?overwrite=true"
 
-    curl --fail --silent --show-error \
-        --request PUT \
-        --cookie "JSESSIONID=$jsession" \
-        --form "file=@$local_file" \
+    curl -k --cookie "JSESSIONID=$jsession" \
+        -X PUT \
+        -F "file=@$local_file" \
         "$url"
 }

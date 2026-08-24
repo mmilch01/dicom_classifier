@@ -19,7 +19,8 @@
       "description": "Name of the XNAT project resource containing the spreadsheet",
       "type": "string",
       "required": true,
-      "replacement-key": "#RESOURCE_NAME#"
+      "replacement-key": "#RESOURCE_NAME#",
+      "select-values": []
     },
     {
       "name": "CSV_NAME",
@@ -27,7 +28,8 @@
       "description": "Filename of the CSV spreadsheet within the project resource",
       "type": "string",
       "required": true,
-      "replacement-key": "#CSV_NAME#"
+      "replacement-key": "#CSV_NAME#",
+      "select-values": []
     },
     {
       "name": "PROJECT_ID",
@@ -35,7 +37,8 @@
       "description": "XNAT project ID",
       "type": "string",
       "required": true,
-      "replacement-key": "#PROJECT_ID#"
+      "replacement-key": "#PROJECT_ID#",
+      "select-values": []
     }
   ],
   "outputs": [],
@@ -61,7 +64,8 @@
           "description": "Name of the project resource containing the spreadsheet",
           "type": "string",
           "required": true,
-          "provides-value-for-command-input": "RESOURCE_NAME"
+          "provides-value-for-command-input": "RESOURCE_NAME",
+          "load-children": true
         },
         {
           "name": "csv-name",
@@ -69,7 +73,8 @@
           "description": "Filename of the CSV spreadsheet within the project resource",
           "type": "string",
           "required": true,
-          "provides-value-for-command-input": "CSV_NAME"
+          "provides-value-for-command-input": "CSV_NAME",
+          "load-children": true
         }
       ],
       "derived-inputs": [
@@ -79,6 +84,7 @@
           "type": "string",
           "required": true,
           "provides-value-for-command-input": "PROJECT_ID",
+          "load-children": true,
           "derived-from-wrapper-input": "project",
           "derived-from-xnat-object-property": "id",
           "multiple": false
