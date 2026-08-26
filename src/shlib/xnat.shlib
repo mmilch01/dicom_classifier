@@ -3,7 +3,7 @@
 xnat_get_jsession() {
     local server="$1" user="$2" password="$3" jsession curl_status
 
-    jsession=$(curl -s -k -u --fail "$user:$password" "$server/data/JSESSION")
+    jsession=$(curl -s -k --fail -u "$user:$password" "$server/data/JSESSION")
     curl_status=$?
     echo -n "$jsession"
     return "$curl_status"
@@ -13,6 +13,8 @@ xnat_download_project_resource_file() {
     local server="$1" project_id="$2" resource_name="$3" 
     local remote_filename="$4" destination="$5" jsession="$6" url cmd
     url="$server/data/projects/$project_id/resources/$resource_name/files/$remote_filename"
+
+    printf 'JSESSION: %q, length=%d\n' "$jsession" "${#jsession}"
 
     cmd=(curl --fail -k --cookie "JSESSIONID=$jsession" --output "$destination" "$url")
     echo ${cmd[@]}
