@@ -13,7 +13,6 @@ Type II (run_heuristic_classifier output): one row per experiment.
 import argparse
 import math
 import sys
-from typing import Optional
 
 import pandas as pd
 from pyxnat import Interface
@@ -51,9 +50,41 @@ def find_label_col(df: pd.DataFrame, hint: str) -> str:
 
 def _is_valid_scan(v) -> bool:
     try:
-        return not (v is None or (isinstance(v, float) and math.isnan(v)))
+        if v is None or pd.isna(v):
+            return False
+        if isinstance(v, str) and not v.strip():
+            return False
+        return True
     except Exception:
         return False
+
+
+def _scan_id_to_str(v) -> str:
+    if isinstance(v, float) and math.isfinite(v) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def filter_experiment(df: pd.DataFrame, experiment_id: str) -> pd.DataFrame:
+    if not experiment_id:
+        return df
+    if "experiment" not in df.columns:
+        raise SystemExit("Cannot filter by experiment: CSV has no 'experiment' column.")
+
+    experiment_values = df["experiment"].astype(str).str.strip()
+    filtered = df[experiment_values == experiment_id]
+    if not filtered.empty:
+        print(f"Filtered to experiment '{experiment_id}' ({len(filtered)} rows).")
+        return filtered
+
+    if experiment_values.isin(["", "NA", "N/A", "nan", "None"]).all():
+        df = df.copy()
+        df["experiment"] = experiment_id
+        print(f"Using experiment '{experiment_id}' for all {len(df)} rows.")
+        return df
+
+    if filtered.empty:
+        raise SystemExit(f"No rows found for experiment '{experiment_id}'.")
 
 
 class XnatClient:
@@ -77,7 +108,7 @@ def apply_type1(
     total = len(df)
     for _, row in df.iterrows():
         experiment_id = str(row["experiment"])
-        scan_id = str(row["scan"])
+        scan_id = _scan_id_to_str(row["scan"])
         label = str(row[label_col])
         try:
             client.set_scan_type(project_id, experiment_id, scan_id, label)
@@ -114,10 +145,7 @@ def apply_type2(
             raw = row[col_label]
             if not _is_valid_scan(raw):
                 continue
-            try:
-                scan_id = str(int(float(raw)))
-            except (ValueError, TypeError):
-                continue
+            scan_id = _scan_id_to_str(raw)
             try:
                 client.set_scan_type(project_id, experiment_id, scan_id, col_label)
                 n_done += 1
@@ -141,11 +169,13 @@ def main() -> None:
     ap.add_argument("--user", required=True, help="XNAT username")
     ap.add_argument("--password", required=True, help="XNAT password")
     ap.add_argument("--project", required=True, help="XNAT project ID")
+    ap.add_argument("--experiment", default="", help="Only update rows for this XNAT experiment/session")
     ap.add_argument("--label-col", default="", help="Label column for type I CSV [auto-detect]")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     df = pd.read_csv(args.input)
+    df = filter_experiment(df, args.experiment)
     csv_type = detect_csv_type(df)
     print(f"Detected CSV type {csv_type} ({len(df)} rows).")
 
