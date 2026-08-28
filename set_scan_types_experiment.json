@@ -7,7 +7,7 @@
   "info-url": "",
   "image": "mmilch01/dicom_classifier:0.13",
   "type": "docker",
-  "command-line": "set_scan_types_xnat \"#RESOURCE_NAME#\" \"#CSV_NAME#\" -server \"$XNAT_HOST\" -user \"$XNAT_USER\" -pass \"$XNAT_PASS\" -project \"#PROJECT_ID#\" -experiment \"#EXPERIMENT_ID#\"",
+  "command-line": "set_scan_types_xnat \"#RESOURCE_NAME#\" \"#CSV_NAME#\" -server \"$XNAT_HOST\" -user \"$XNAT_USER\" -pass \"$XNAT_PASS\" -project \"#PROJECT_ID#\" -experiment \"#EXPERIMENT_ID#\" -label-column \"#LABEL_COLUMN#\"",
   "override-entrypoint": true,
   "mounts": [],
   "environment-variables": {},
@@ -38,6 +38,16 @@
       "type": "string",
       "required": true,
       "replacement-key": "#PROJECT_ID#",
+      "select-values": []
+    },
+    {
+      "name": "LABEL_COLUMN",
+      "label": "Label column",
+      "description": "Label column for a type I CSV",
+      "type": "string",
+      "default-value": "labels1",
+      "required": false,
+      "replacement-key": "#LABEL_COLUMN#",
       "select-values": []
     },
     {
@@ -84,6 +94,16 @@
           "required": true,
           "provides-value-for-command-input": "CSV_NAME",
           "load-children": true
+        },
+        {
+          "name": "label-column",
+          "label": "Label column",
+          "description": "Label column for a type I CSV",
+          "type": "string",
+          "default-value": "labels1",
+          "required": false,
+          "provides-value-for-command-input": "LABEL_COLUMN",
+          "load-children": true
         }
       ],
       "derived-inputs": [
@@ -99,8 +119,8 @@
           "multiple": false
         },
         {
-          "name": "experiment-id",
-          "description": "XNAT experiment/session ID",
+          "name": "experiment-label",
+          "description": "XNAT experiment label",
           "type": "string",
           "required": true,
           "provides-value-for-command-input": "EXPERIMENT_ID",

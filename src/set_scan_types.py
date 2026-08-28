@@ -2,8 +2,8 @@
 Set XNAT scan type fields from a classifier CSV.
 
 Type I  (run_classifier_xnat output):  one row per scan.
-  Required columns: experiment, scan, <label_col>
-  Each row sets one scan's type to the value in <label_col>.
+  Required columns: experiment, scan, <label column>
+  Each row sets one scan's type to the value in <label column>.
 
 Type II (run_heuristic_classifier output): one row per experiment.
   Required columns: experiment, T1nc, T1ce, T2, FLAIR (scan numbers)
@@ -19,7 +19,6 @@ from pyxnat import Interface
 
 TYPE2_COLS = {"T1nc", "T1ce", "T2", "FLAIR"}
 TYPE2_LABELS = ["T1nc", "T1ce", "T2", "FLAIR"]
-TYPE1_LABEL_CANDIDATES = ["labels1", "label_manual", "label", "type", "scan_type"]
 
 
 def detect_csv_type(df: pd.DataFrame) -> int:
@@ -32,19 +31,6 @@ def detect_csv_type(df: pd.DataFrame) -> int:
         f"Type I requires columns: experiment, scan, <label>.\n"
         f"Type II requires columns: experiment, T1nc, T1ce, T2, FLAIR.\n"
         f"Found: {list(df.columns)}"
-    )
-
-
-def find_label_col(df: pd.DataFrame, hint: str) -> str:
-    if hint and hint in df.columns:
-        return hint
-    for name in TYPE1_LABEL_CANDIDATES:
-        if name in df.columns:
-            return name
-    raise SystemExit(
-        f"Cannot find a label column. Tried: {TYPE1_LABEL_CANDIDATES}.\n"
-        f"Available columns: {list(df.columns)}\n"
-        f"Use --label-col to specify."
     )
 
 
@@ -99,7 +85,7 @@ class XnatClient:
 
 def apply_type1(
     df: pd.DataFrame,
-    label_col: str,
+    label_column: str,
     client: XnatClient,
     project_id: str,
     verbose: bool,
@@ -109,7 +95,7 @@ def apply_type1(
     for _, row in df.iterrows():
         experiment_id = str(row["experiment"])
         scan_id = _scan_id_to_str(row["scan"])
-        label = str(row[label_col])
+        label = str(row[label_column])
         try:
             client.set_scan_type(project_id, experiment_id, scan_id, label)
             n_done += 1
@@ -170,7 +156,11 @@ def main() -> None:
     ap.add_argument("--password", required=True, help="XNAT password")
     ap.add_argument("--project", required=True, help="XNAT project ID")
     ap.add_argument("--experiment", default="", help="Only update rows for this XNAT experiment/session")
-    ap.add_argument("--label-col", default="", help="Label column for type I CSV [auto-detect]")
+    ap.add_argument(
+        "--label-column",
+        default="labels1",
+        help="Label column for type I CSV [labels1]",
+    )
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -182,9 +172,15 @@ def main() -> None:
     client = XnatClient(server=args.server, user=args.user, password=args.password)
 
     if csv_type == 1:
-        label_col = find_label_col(df, args.label_col)
-        print(f"Using label column: '{label_col}'")
-        n_done, n_fail = apply_type1(df, label_col, client, args.project, args.verbose)
+        if args.label_column not in df.columns:
+            raise SystemExit(
+                f"Label column '{args.label_column}' not found.\n"
+                f"Available columns: {list(df.columns)}"
+            )
+        print(f"Using label column: '{args.label_column}'")
+        n_done, n_fail = apply_type1(
+            df, args.label_column, client, args.project, args.verbose
+        )
     else:
         n_done, n_fail = apply_type2(df, client, args.project, args.verbose)
 
