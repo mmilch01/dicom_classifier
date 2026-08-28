@@ -129,6 +129,14 @@ def classify_primary(row):
 
     # Rules below apply only when the ORIGINAL labels1 is OT.
     if labels1 != "OT":
+        # Rule 10: correct an anatomical label when SeriesDescription says FLAIR.
+        if (
+            series_description
+            and "FLAIR" in series_description
+            and labels1 in ANATOMICAL_TYPES
+            and labels1 != "T2FLAIR"
+        ):
+            return "T2FLAIR"
         return primary
 
     # Rule 2a: ADC -> MD
