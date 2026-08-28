@@ -205,7 +205,7 @@ def description_contrast(series_description):
     if desc.endswith("_PRE") or "_PRE_" in desc:
         return "nc"
 
-    if desc.endswith("_POST") or "_POST_" in desc:
+    if desc.endswith("_POST") or "_POST_" in desc or desc.endswith("+C"):
         return "ce"
 
     return None
@@ -216,8 +216,9 @@ def classify_experiment(rows):
     Classify all scans in one experiment.
 
     Primary labels are assigned first. Contrast classification then uses:
-      1. SeriesDescription PRE/POST rules.
-      2. DSC ordering, which overrides PRE/POST.
+      1. SeriesDescription PRE/POST/+C rules.
+      2. Adjacency to a SeriesDescription-classified contrast scan.
+      3. DSC ordering, which overrides the other contrast rules.
     """
     work = []
 
@@ -262,6 +263,23 @@ def classify_experiment(rows):
         for item in post_candidates:
             item["contrast"] = "ce"
 
+        # Step 3: infer contrast from adjacency to the first T1w scan whose
+        # SeriesDescription explicitly identifies it as post-contrast.
+        if post_candidates:
+            first_contrast = min(
+                item["series_number"] for item in post_candidates
+            )
+            for item in work:
+                if norm(item["primary"]) not in T1W_TYPES:
+                    continue
+                if item["series_number"] is None:
+                    continue
+
+                if item["series_number"] < first_contrast:
+                    item["contrast"] = "nc"
+                elif item["series_number"] > first_contrast:
+                    item["contrast"] = "ce"
+
     # Step 2: first DSC = DSC scan with the lowest valid SeriesNumber.
     dsc_numbers = [
         item["series_number"]
@@ -283,7 +301,7 @@ def classify_experiment(rows):
             elif item["series_number"] > first_dsc:
                 item["contrast"] = "ce"
 
-    # Step 3: final heuristic label.
+    # Step 4: final heuristic label.
     for item in work:
         primary = item["primary"]
         if norm(primary) in T1W_TYPES and item["contrast"]:
