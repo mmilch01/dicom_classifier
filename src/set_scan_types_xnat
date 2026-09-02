@@ -19,7 +19,7 @@ if [ -z "$2" ]; then
     echo "  -experiment <XNAT session>   Optional; only update this experiment/session"
     echo "  -user       <XNAT user>     Required"
     echo "  -pass       <XNAT password> Required"
-    echo "  -label-column <column name> Label column for type I CSV [labels1]"
+    echo "  -label_col  <column name>   Label column for type I CSV [auto-detect]"
     echo "  -output     <directory>     Working directory [/output]"
     echo "  -verbose    <0|1>           Verbose output [0]"
     exit -1
@@ -46,7 +46,7 @@ csv_name=$1; shift
 
 out_dir=/output
 verbose=0
-label_column=""
+label_col=""
 xnat_server=""
 project_id=""
 experiment_id=""
@@ -61,7 +61,7 @@ while [ -n "$1" ]; do
         -experiment) shift; experiment_id=$1;  shift ;;
         -user)      shift; xnat_user=$1;      shift ;;
         -pass)      shift; xnat_pass=$1;      shift ;;
-        -label-column) shift; label_column=$1; shift ;;
+        -label_col) shift; label_col=$1;      shift ;;
         -output)    shift; out_dir=$1;        shift ;;
         -verbose)   shift; verbose=$1;        shift ;;
         *) echo "unknown argument: $1, skipping"; shift ;;
@@ -79,6 +79,7 @@ fi
 jsession_token=$(xnat_get_jsession "$xnat_server" "$xnat_user" "$xnat_pass") ||
     handle_error "$PROGRAM_NAME" "Cannot obtain JSESSION from $xnat_server"
 echo "Obtained JSESSION token $jsession_token."
+trap 'xnat_close_jsession "$xnat_server" "$jsession_token"' EXIT
 
 # Ensure working directory exists
 ensure_directory "$out_dir" ||
@@ -112,8 +113,8 @@ py_args=(--input "$local_csv" --server "$xnat_server" --user $xnat_user --passwo
 if [ -n "$experiment_id" ]; then
     py_args+=(--experiment "$experiment_id")
 fi
-if [ -n "$label_column" ]; then
-    py_args+=(--label-column "$label_column")
+if [ -n "$label_col" ]; then
+    py_args+=(--label-column "$label_col")
 fi
 if (( verbose )); then
     py_args+=(--verbose)

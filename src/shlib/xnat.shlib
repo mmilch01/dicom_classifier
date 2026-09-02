@@ -9,6 +9,15 @@ xnat_get_jsession() {
     return "$curl_status"
 }
 
+xnat_close_jsession() {
+    local server="$1" jsession="$2"
+
+    curl -s -k --fail \
+        --cookie "JSESSIONID=$jsession" \
+        --request DELETE \
+        "$server/data/JSESSION/"
+}
+
 xnat_download_project_resource_file() {
     local server="$1" project_id="$2" resource_name="$3" 
     local remote_filename="$4" destination="$5" jsession="$6" url cmd

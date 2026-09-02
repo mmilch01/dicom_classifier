@@ -82,6 +82,9 @@ class XnatClient:
         scan = self.session.select.project(project_id).experiment(experiment_id).scan(scan_id)
         scan.attrs.set("type", label)
 
+    def close_session(self):
+        self.session.close_jsession()
+
 
 def apply_type1(
     df: pd.DataFrame,
@@ -170,19 +173,21 @@ def main() -> None:
     print(f"Detected CSV type {csv_type} ({len(df)} rows).")
 
     client = XnatClient(server=args.server, user=args.user, password=args.password)
-
-    if csv_type == 1:
-        if args.label_column not in df.columns:
-            raise SystemExit(
-                f"Label column '{args.label_column}' not found.\n"
-                f"Available columns: {list(df.columns)}"
+    try:        
+        if csv_type == 1:
+            if args.label_column not in df.columns:
+                raise SystemExit(
+                    f"Label column '{args.label_column}' not found.\n"
+                    f"Available columns: {list(df.columns)}"
+                )
+            print(f"Using label column: '{args.label_column}'")
+            n_done, n_fail = apply_type1(
+                df, args.label_column, client, args.project, args.verbose
             )
-        print(f"Using label column: '{args.label_column}'")
-        n_done, n_fail = apply_type1(
-            df, args.label_column, client, args.project, args.verbose
-        )
-    else:
-        n_done, n_fail = apply_type2(df, client, args.project, args.verbose)
+        else:
+            n_done, n_fail = apply_type2(df, client, args.project, args.verbose)
+    finally:
+        client.close_session()
 
     print(f"Done. Updated {n_done} scans, {n_fail} failures.")
     if n_fail > 0:
