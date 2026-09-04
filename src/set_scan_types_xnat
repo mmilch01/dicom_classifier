@@ -78,7 +78,7 @@ if [ -z "$xnat_user" ] || [ -z "$xnat_pass" ]; then
 fi
 jsession_token=$(xnat_get_jsession "$xnat_server" "$xnat_user" "$xnat_pass") ||
     handle_error "$PROGRAM_NAME" "Cannot obtain JSESSION from $xnat_server"
-echo "Obtained JSESSION token $jsession_token."
+echo "Obtained JSESSION token."
 trap 'xnat_close_jsession "$xnat_server" "$jsession_token"' EXIT
 
 # Ensure working directory exists
@@ -100,8 +100,6 @@ cmd=(xnat_download_project_resource_file \
     "$local_csv" \
     "$jsession_token")
 
-echo ${cmd[@]}
-#DEBUG
 if [ ! -f "$local_csv" ]; then 
     "${cmd[@]}" || handle_error "$PROGRAM_NAME" "Failed to download $csv_name from resource $resource_name"
 fi
@@ -109,7 +107,7 @@ fi
 echo "Downloaded $csv_name to $local_csv"
 
 # Build python call
-py_args=(--input "$local_csv" --server "$xnat_server" --user $xnat_user --password $xnat_pass --project $project_id)
+py_args=(--input "$local_csv" --server "$xnat_server" --jsession "$jsession_token" --project "$project_id")
 if [ -n "$experiment_id" ]; then
     py_args+=(--experiment "$experiment_id")
 fi
@@ -121,7 +119,6 @@ if (( verbose )); then
 fi
 
 echo "Setting scan types..."
-echo python3 "$PYLIB/set_scan_types.py" "${py_args[@]}"
 
 python3 "$PYLIB/set_scan_types.py" "${py_args[@]}"
 if [ $? -ne 0 ]; then

@@ -13,9 +13,10 @@ Type II (run_heuristic_classifier output): one row per experiment.
 import argparse
 import math
 import sys
+from urllib.parse import quote
 
 import pandas as pd
-from pyxnat import Interface
+import xnat
 
 TYPE2_COLS = {"T1nc", "T1ce", "T2", "FLAIR"}
 TYPE2_LABELS = ["T1nc", "T1ce", "T2", "FLAIR"]
@@ -74,16 +75,28 @@ def filter_experiment(df: pd.DataFrame, experiment_id: str) -> pd.DataFrame:
 
 
 class XnatClient:
-    def __init__(self, server: str, user: str, password: str):
-        # pyxnat Interface expects server like "https://xnat.example.org"
-        self.session = Interface(server=server, user=user, password=password)
+    def __init__(self, server: str, jsession: str):
+        # The caller owns the supplied JSESSION and closes it after this process
+        # exits. cli=True tells xnatpy not to invalidate that shared session.
+        self.session = xnat.connect(server=server, jsession=jsession, cli=True)
+        self._experiments = {}
+
+    def _get_experiment(self, project_id: str, experiment_id: str):
+        key = (project_id, experiment_id)
+        if key not in self._experiments:
+            project = quote(project_id, safe="")
+            experiment = quote(experiment_id, safe="")
+            uri = f"/data/projects/{project}/experiments/{experiment}"
+            self._experiments[key] = self.session.create_object(uri)
+        return self._experiments[key]
 
     def set_scan_type(self, project_id: str, experiment_id: str, scan_id: str, label: str) -> None:
-        scan = self.session.select.project(project_id).experiment(experiment_id).scan(scan_id)
-        scan.attrs.set("type", label)
+        experiment = self._get_experiment(project_id, experiment_id)
+        scan = experiment.scans[scan_id]
+        scan.type = label
 
     def close_session(self):
-        self.session.close_jsession()
+        self.session.disconnect()
 
 
 def apply_type1(
@@ -155,8 +168,7 @@ def main() -> None:
     
     ap.add_argument("-i", "--input", required=True, help="Input CSV file")
     ap.add_argument("--server", required=True, help="XNAT server URL")
-    ap.add_argument("--user", required=True, help="XNAT username")
-    ap.add_argument("--password", required=True, help="XNAT password")
+    ap.add_argument("--jsession", required=True, help="Existing XNAT JSESSION ID")
     ap.add_argument("--project", required=True, help="XNAT project ID")
     ap.add_argument("--experiment", default="", help="Only update rows for this XNAT experiment/session")
     ap.add_argument(
@@ -172,7 +184,7 @@ def main() -> None:
     csv_type = detect_csv_type(df)
     print(f"Detected CSV type {csv_type} ({len(df)} rows).")
 
-    client = XnatClient(server=args.server, user=args.user, password=args.password)
+    client = XnatClient(server=args.server, jsession=args.jsession)
     try:        
         if csv_type == 1:
             if args.label_column not in df.columns:

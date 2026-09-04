@@ -33,6 +33,7 @@ RUN micromamba install -y -n base -c conda-forge \
  && micromamba run -n base pip install --no-cache-dir \
     tensorflow==2.13.0 \
     pyxnat==1.6.3 \
+    xnat==0.8.1 \
     ipywidgets==8.1.5 \
  && micromamba clean -a -y
 
